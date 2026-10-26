@@ -17,7 +17,7 @@ export async function execute(interaction) {
     .setTitle('Hướng dẫn sử dụng')
     .setDescription(
       '**Cấp độ & Xếp hạng**\n' +
-      '**/rank** `[user]` – Xem hồ sơ cấp độ, thanh tiến trình XP và thống kê cá nhân.\n' +
+      '**/rank** – Xem cấp độ và tiến trình cá nhân (hoặc gắn thẻ @bạn_bè để xem giúp).\n' +
       '**/leaderboard** – Xem bảng vinh danh Top 10 thành viên năng nổ nhất server.\n\n' +
       '**Cơ chế nhận điểm**\n' +
       '• **Chat văn bản:** Nhận 10 - 15 XP mỗi tin nhắn hợp lệ (cooldown 60 giây).\n' +
