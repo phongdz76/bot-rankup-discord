@@ -1,6 +1,6 @@
 import { config } from '../config/index.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, syncUserRoles } from './level.js';
+import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from './level.js';
 
 // Cache bộ nhớ đệm kiểm tra cooldown 60 giây
 const chatCooldowns = new Map();
@@ -58,12 +58,8 @@ export async function handleChatMessage(message) {
       // Đồng bộ Role trên server
       if (message.member) {
         await syncUserRoles(message.member, newLevel);
+        await sendLevelUpNotification(message.guild, message.member, newLevel, 'chat');
       }
-
-      // Gửi thông báo chúc mừng tinh tế (không dùng emoji rườm rà)
-      await message.channel.send({
-        content: `Chúc mừng <@${userId}> đã đạt **Cấp độ ${newLevel}**!`
-      }).catch(() => null);
 
       console.log(`[RankUp] User ${message.author.tag} thang cap tu Level ${previousLevel} len Level ${newLevel}`);
     } else {

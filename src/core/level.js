@@ -87,3 +87,59 @@ export async function syncUserRoles(member, newLevel) {
     console.error(`[Role] [ERROR] Khong the cap nhat role cho ${member.user.tag}:`, error.message);
   }
 }
+
+/**
+ * Gửi thông báo thăng cấp tập trung về kênh cố định (#bot-command)
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').GuildMember} member
+ * @param {number} newLevel
+ * @param {'chat'|'voice'} source
+ */
+export async function sendLevelUpNotification(guild, member, newLevel, source = 'chat') {
+  if (!guild || !member) return;
+
+  const targetChannelId = config.levelUpChannelId;
+  let channel = null;
+
+  if (targetChannelId) {
+    channel = guild.channels.cache.get(targetChannelId);
+  }
+
+  // Fallback: Tìm kênh text có tên 'bot-command' nếu không tìm thấy ID
+  if (!channel) {
+    channel = guild.channels.cache.find(
+      (c) => c.isTextBased() && c.name.includes('bot-command')
+    );
+  }
+
+  if (!channel || !channel.isTextBased()) {
+    console.warn('[RankUp] [WARN] Khong tim thay kenh thong bao bot-command.');
+    return;
+  }
+
+  const currentTier = getRankTierForLevel(newLevel);
+  const sourceText = source === 'voice' ? 'Hoạt động đàm thoại Voice' : 'Trò chuyện kênh Chat';
+
+  try {
+    const { EmbedBuilder } = await import('discord.js');
+    const embed = new EmbedBuilder()
+      .setColor(currentTier?.color || config.theme.color)
+      .setAuthor({
+        name: 'Thăng Cấp Thành Viên',
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 128 }))
+      .setDescription(
+        `Chúc mừng <@${member.id}> đã đạt **Cấp độ ${newLevel}**!\n\n` +
+        `• Danh hiệu đạt được: **${currentTier?.name || 'Thành viên'}**\n` +
+        `• Nguồn tích lũy: **${sourceText}**`
+      )
+      .setFooter({ text: config.theme.footerText })
+      .setTimestamp();
+
+    await channel.send({ embeds: [embed] });
+  } catch (err) {
+    console.error('[RankUp] [ERROR] Khong the gui thong bao len kenh:', err.message);
+  }
+}
+

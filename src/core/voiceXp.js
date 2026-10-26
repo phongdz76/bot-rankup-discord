@@ -1,7 +1,7 @@
 import { ChannelType } from 'discord.js';
 import { config } from '../config/index.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, syncUserRoles } from './level.js';
+import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from './level.js';
 
 let voiceInterval = null;
 
@@ -108,6 +108,7 @@ async function awardVoiceXp(guildId, member) {
       await userDoc.save();
 
       await syncUserRoles(member, newLevel);
+      await sendLevelUpNotification(member.guild, member, newLevel, 'voice');
       console.log(`[RankUp] User ${member.user.tag} dat Level ${newLevel} tu hoat dong Voice.`);
     } else {
       await userDoc.save();

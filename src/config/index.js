@@ -6,6 +6,7 @@ export const config = {
   token: process.env.DISCORD_TOKEN || '',
   clientId: process.env.DISCORD_CLIENT_ID || '',
   guildId: process.env.GUILD_ID || '',
+  levelUpChannelId: process.env.LEVEL_UP_CHANNEL_ID || '1247010614342062162', // Mặc định kênh #bot-command
 
   // Database
   mongoUri: process.env.MONGODB_URI || '',
