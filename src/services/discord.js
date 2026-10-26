@@ -48,19 +48,19 @@ async function registerSlashCommands() {
   try {
     console.log('[Discord] [INFO] Dang dang ky Slash Commands...');
 
+    // 1. Đăng ký toàn cục (Global) -> Bắt buộc để Discord hiển thị mục "Lệnh" trên Thẻ Profile của Bot
+    await rest.put(Routes.applicationCommands(config.clientId), {
+      body: commandsBody
+    });
+    console.log('[Discord] [INFO] Da dang ky Slash Commands Global (hien thi tren Profile Bot).');
+
+    // 2. Đồng bộ thêm cho Guild để cập nhật tức thì trong server
     if (config.guildId) {
-      // Đăng ký cho Guild cụ thể (cập nhật ngay lập tức không bị delay)
       await rest.put(
         Routes.applicationGuildCommands(config.clientId, config.guildId),
         { body: commandsBody }
       );
-      console.log(`[Discord] [INFO] Da dang ky Slash Commands cho Guild: ${config.guildId}`);
-    } else {
-      // Đăng ký toàn cục (Global)
-      await rest.put(Routes.applicationCommands(config.clientId), {
-        body: commandsBody
-      });
-      console.log('[Discord] [INFO] Da dang ky Slash Commands Global thanh cong.');
+      console.log(`[Discord] [INFO] Da dong bo Slash Commands vao Guild: ${config.guildId}`);
     }
   } catch (error) {
     console.error('[Discord] [ERROR] Dang ky Slash Commands that bai:', error.message);
