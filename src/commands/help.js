@@ -20,7 +20,7 @@ export async function execute(interaction) {
       '**/rank** – Xem cấp độ và tiến trình cá nhân (hoặc gắn thẻ @bạn_bè để xem giúp).\n' +
       '**/leaderboard** – Xem bảng vinh danh Top 10 thành viên năng nổ nhất server.\n\n' +
       '**Cơ chế nhận điểm**\n' +
-      '• **Chat văn bản:** Nhận 10 - 15 XP mỗi tin nhắn hợp lệ (cooldown 60 giây).\n' +
+      '• **Chat văn bản:** Nhận 10 - 15 XP mỗi tin nhắn hợp lệ (cooldown 15 giây).\n' +
       '• **Kênh thoại (Voice):** Nhận 2 XP mỗi phút (yêu cầu phòng từ 2 người trở lên, không tắt mic/tai nghe).\n\n' +
       '**Lộ trình thăng tiến 4 bậc**\n' +
       '• **Level 0:** Đáy xã hội (Khởi đầu)\n' +

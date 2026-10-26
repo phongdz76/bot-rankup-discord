@@ -1,6 +1,11 @@
 import { config } from '../config/index.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from './level.js';
+import {
+  calculateLevelData,
+  syncUserRoles,
+  sendLevelUpNotification,
+  syncUserLevelFromRoles
+} from './level.js';
 
 // Cache bộ nhớ đệm kiểm tra cooldown 60 giây
 const chatCooldowns = new Map();
@@ -39,6 +44,7 @@ export async function handleChatMessage(message) {
   try {
     // Tìm hoặc tạo mới bản ghi user trong DB
     let userDoc = await User.findOne({ userId, guildId });
+    userDoc = await syncUserLevelFromRoles(message.member, userDoc);
     if (!userDoc) {
       userDoc = new User({ userId, guildId, xp: 0, level: 0, messageCount: 0 });
     }

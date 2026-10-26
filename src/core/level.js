@@ -1,4 +1,5 @@
 import { config } from '../config/index.js';
+import { User } from '../models/User.js';
 
 /**
  * Tính lượng XP cần để thăng cấp từ Level hiện tại lên Level tiếp theo
@@ -142,4 +143,71 @@ export async function sendLevelUpNotification(guild, member, newLevel, source = 
     console.error('[RankUp] [ERROR] Khong the gui thong bao len kenh:', err.message);
   }
 }
+
+/**
+ * Tự động đồng bộ cấp độ khởi đầu từ Role hiện có trên Discord cho thành viên:
+ * Nếu thành viên đã có sẵn role Người nhà nước / Đức quốc xã / Nigger Boy / Người do thái trên server
+ * thì tự động khởi tạo Level và XP tương ứng thay vì để họ ở Level 0 Đáy xã hội.
+ * @param {import('discord.js').GuildMember} member
+ * @param {object} userDoc
+ * @returns {Promise<object>}
+ */
+export async function syncUserLevelFromRoles(member, userDoc) {
+  if (!member || !member.roles) return userDoc;
+
+  const roles = member.roles.cache;
+  let targetLevel = 0;
+  let targetXp = 0;
+
+  // Kiểm tra từ cấp cao nhất xuống
+  if (
+    roles.has(config.roles.lvl30) ||
+    roles.has('1291487393811136562') || // Đức quốc xã
+    roles.some((r) => r.name === 'Người nhà nước' || r.name === 'Đức quốc xã')
+  ) {
+    targetLevel = 30;
+    targetXp = 110000;
+  } else if (
+    roles.has(config.roles.lvl15) ||
+    roles.some((r) => r.name === 'Nigger Boy')
+  ) {
+    targetLevel = 15;
+    targetXp = 32000;
+  } else if (
+    roles.has(config.roles.lvl5) ||
+    roles.some((r) => r.name === 'Người do thái')
+  ) {
+    targetLevel = 5;
+    targetXp = 5000;
+  }
+
+  // Nếu user chưa có trong DB hoặc level hiện tại thấp hơn role đang giữ trên server
+  if (targetLevel > (userDoc?.level || 0)) {
+    if (!userDoc || !userDoc.save) {
+      userDoc = await User.findOneAndUpdate(
+        { userId: member.id, guildId: member.guild.id },
+        {
+          $setOnInsert: {
+            messageCount: 0,
+            totalVoiceMinutes: 0
+          },
+          $set: {
+            level: targetLevel,
+            xp: targetXp
+          }
+        },
+        { upsert: true, new: true }
+      );
+    } else {
+      userDoc.level = targetLevel;
+      if (userDoc.xp < targetXp) {
+        userDoc.xp = targetXp;
+      }
+      await userDoc.save().catch(() => null);
+    }
+  }
+
+  return userDoc;
+}
+
 

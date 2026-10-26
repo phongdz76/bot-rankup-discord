@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, getRankTierForLevel } from '../core/level.js';
+import { calculateLevelData, getRankTierForLevel, syncUserLevelFromRoles } from '../core/level.js';
 import { createRankEmbed } from '../utils/embed.js';
 
 export const data = new SlashCommandBuilder()
@@ -28,6 +28,7 @@ export async function execute(interaction) {
 
   try {
     let userDoc = await User.findOne({ userId, guildId });
+    userDoc = await syncUserLevelFromRoles(targetMember, userDoc);
     if (!userDoc) {
       userDoc = {
         userId,

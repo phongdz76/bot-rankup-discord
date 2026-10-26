@@ -35,7 +35,7 @@ export const config = {
     chat: {
       min: 10,
       max: 15,
-      cooldownSeconds: 60
+      cooldownSeconds: 15
     },
     voice: {
       rewardPerMinute: 2,
