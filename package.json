@@ -1,0 +1,30 @@
+{
+  "name": "bot-rankup-discord",
+  "version": "1.0.0",
+  "description": "Discord XP Ranking & Auto Role Bot - Phong cách Hu Tao",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "rankup",
+    "level",
+    "xp",
+    "hutao"
+  ],
+  "author": "phongdz76",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongoose": "^8.12.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
