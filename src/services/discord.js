@@ -11,6 +11,7 @@ import { handleChatMessage } from '../core/chatXp.js';
 import { startVoiceXpTracker, stopVoiceXpTracker } from '../core/voiceXp.js';
 import * as rankCommand from '../commands/rank.js';
 import * as leaderboardCommand from '../commands/leaderboard.js';
+import * as helpCommand from '../commands/help.js';
 
 export const client = new Client({
   intents: [
@@ -26,6 +27,7 @@ export const client = new Client({
 client.commands = new Collection();
 client.commands.set(rankCommand.data.name, rankCommand);
 client.commands.set(leaderboardCommand.data.name, leaderboardCommand);
+client.commands.set(helpCommand.data.name, helpCommand);
 
 /**
  * Đăng ký Slash Commands với Discord API
@@ -37,7 +39,11 @@ async function registerSlashCommands() {
   }
 
   const rest = new REST({ version: '10' }).setToken(config.token);
-  const commandsBody = [rankCommand.data.toJSON(), leaderboardCommand.data.toJSON()];
+  const commandsBody = [
+    rankCommand.data.toJSON(),
+    leaderboardCommand.data.toJSON(),
+    helpCommand.data.toJSON()
+  ];
 
   try {
     console.log('[Discord] [INFO] Dang dang ky Slash Commands...');

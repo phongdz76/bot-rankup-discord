@@ -105,15 +105,15 @@ export async function sendLevelUpNotification(guild, member, newLevel, source = 
     channel = guild.channels.cache.get(targetChannelId);
   }
 
-  // Fallback: Tìm kênh text có tên 'bot-command' nếu không tìm thấy ID
+  // Fallback: Tìm kênh text có tên 'rank-up' hoặc 'rank' nếu không tìm thấy theo ID
   if (!channel) {
     channel = guild.channels.cache.find(
-      (c) => c.isTextBased() && c.name.includes('bot-command')
+      (c) => c.isTextBased() && (c.name.includes('rank-up') || c.name.includes('rank') || c.name.includes('bot-command'))
     );
   }
 
   if (!channel || !channel.isTextBased()) {
-    console.warn('[RankUp] [WARN] Khong tim thay kenh thong bao bot-command.');
+    console.warn('[RankUp] [WARN] Khong tim thay kenh thong bao rank-up.');
     return;
   }
 
