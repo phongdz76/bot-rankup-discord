@@ -10,6 +10,8 @@ export const data = new SlashCommandBuilder()
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
 export async function execute(interaction) {
+  await interaction.deferReply();
+
   const embed = new EmbedBuilder()
     .setColor(config.theme.color)
     .setTitle('Hướng dẫn sử dụng')
@@ -33,5 +35,5 @@ export async function execute(interaction) {
     .setFooter({ text: config.theme.footerText })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.editReply({ embeds: [embed] });
 }
