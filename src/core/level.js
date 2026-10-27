@@ -145,6 +145,19 @@ export async function sendLevelUpNotification(guild, member, newLevel, source = 
 }
 
 /**
+ * Tính tổng lượng XP tích lũy tối thiểu cần có để đạt mốc Level chỉ định
+ * @param {number} targetLevel
+ * @returns {number}
+ */
+export function getTotalXpForLevel(targetLevel) {
+  let accumulatedXp = 0;
+  for (let l = 0; l < targetLevel; l++) {
+    accumulatedXp += getXpForNextLevel(l);
+  }
+  return accumulatedXp;
+}
+
+/**
  * Tự động đồng bộ cấp độ khởi đầu từ Role hiện có trên Discord cho thành viên:
  * Nếu thành viên đã có sẵn role Người nhà nước / Đức quốc xã / Nigger Boy / Người do thái trên server
  * thì tự động khởi tạo Level và XP tương ứng thay vì để họ ở Level 0 Đáy xã hội.
@@ -157,7 +170,6 @@ export async function syncUserLevelFromRoles(member, userDoc) {
 
   const roles = member.roles.cache;
   let targetLevel = 0;
-  let targetXp = 0;
 
   // Kiểm tra từ cấp cao nhất xuống
   if (
@@ -166,23 +178,23 @@ export async function syncUserLevelFromRoles(member, userDoc) {
     roles.some((r) => r.name === 'Người nhà nước' || r.name === 'Đức quốc xã')
   ) {
     targetLevel = 30;
-    targetXp = 110000;
   } else if (
     roles.has(config.roles.lvl15) ||
     roles.some((r) => r.name === 'Nigger Boy')
   ) {
     targetLevel = 15;
-    targetXp = 32000;
   } else if (
     roles.has(config.roles.lvl5) ||
     roles.some((r) => r.name === 'Người do thái')
   ) {
     targetLevel = 5;
-    targetXp = 5000;
   }
 
-  // Nếu user chưa có trong DB hoặc level hiện tại thấp hơn role đang giữ trên server
-  if (targetLevel > (userDoc?.level || 0)) {
+  const targetXp = getTotalXpForLevel(targetLevel);
+  const currentXp = userDoc?.xp || 0;
+
+  // Nếu user chưa có trong DB hoặc level/XP hiện tại thấp hơn vai trò đang giữ trên server
+  if (targetLevel > (userDoc?.level || 0) || currentXp < targetXp) {
     if (!userDoc || !userDoc.save) {
       userDoc = await User.findOneAndUpdate(
         { userId: member.id, guildId: member.guild.id },

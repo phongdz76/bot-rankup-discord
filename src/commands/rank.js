@@ -1,4 +1,8 @@
-import { SlashCommandBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  ApplicationIntegrationType,
+  InteractionContextType
+} from 'discord.js';
 import { User } from '../models/User.js';
 import { calculateLevelData, getRankTierForLevel, syncUserLevelFromRoles } from '../core/level.js';
 import { createRankEmbed } from '../utils/embed.js';
@@ -6,6 +10,15 @@ import { createRankEmbed } from '../utils/embed.js';
 export const data = new SlashCommandBuilder()
   .setName('rank')
   .setDescription('Xem thông tin cấp độ và tiến trình kinh nghiệm cá nhân')
+  .setIntegrationTypes([
+    ApplicationIntegrationType.GuildInstall,
+    ApplicationIntegrationType.UserInstall
+  ])
+  .setContexts([
+    InteractionContextType.Guild,
+    InteractionContextType.BotDM,
+    InteractionContextType.PrivateChannel
+  ])
   .addUserOption((option) =>
     option
       .setName('user')

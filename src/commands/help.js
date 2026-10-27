@@ -1,9 +1,23 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ApplicationIntegrationType,
+  InteractionContextType
+} from 'discord.js';
 import { config } from '../config/index.js';
 
 export const data = new SlashCommandBuilder()
   .setName('help')
-  .setDescription('Xem hướng dẫn sử dụng và danh sách lệnh của Bot');
+  .setDescription('Xem hướng dẫn sử dụng và danh sách lệnh của Bot')
+  .setIntegrationTypes([
+    ApplicationIntegrationType.GuildInstall,
+    ApplicationIntegrationType.UserInstall
+  ])
+  .setContexts([
+    InteractionContextType.Guild,
+    InteractionContextType.BotDM,
+    InteractionContextType.PrivateChannel
+  ]);
 
 /**
  * Thực thi lệnh /help
@@ -25,10 +39,10 @@ export async function execute(interaction) {
       '**Lộ trình thăng tiến 4 bậc**\n' +
       '• **Level 0:** Đáy xã hội (Khởi đầu)\n' +
       '• **Level 5:** Người do thái (~5,000 XP)\n' +
-      '• **Level 15:** Nigger Boy (~32,000 XP)\n' +
-      '• **Level 30:** Người nhà nước (~110,000 XP)\n\n' +
+      '• **Level 15:** Nigger Boy (~76,000 XP)\n' +
+      '• **Level 30:** Người nhà nước (~523,000 XP)\n\n' +
       '**Kênh thông báo thăng cấp**\n' +
-      `Tất cả thông báo lên cấp từ Chat và Voice được gửi tập trung về kênh <#${config.levelUpChannelId}>.\n\n` +
+      `Thông báo lên cấp từ Chat và Voice được gửi tập trung về kênh <#${config.levelUpChannelId}>.\n\n` +
       '**Hướng dẫn**\n' +
       '**/help** – Xem danh sách lệnh và cơ chế hoạt động.'
     )

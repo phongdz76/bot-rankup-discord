@@ -1,10 +1,23 @@
-import { SlashCommandBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  ApplicationIntegrationType,
+  InteractionContextType
+} from 'discord.js';
 import { User } from '../models/User.js';
 import { createLeaderboardEmbed } from '../utils/embed.js';
 
 export const data = new SlashCommandBuilder()
   .setName('leaderboard')
-  .setDescription('Hiển thị bảng xếp hạng Top 10 thành viên năng nổ nhất server');
+  .setDescription('Hiển thị bảng xếp hạng Top 10 thành viên năng nổ nhất server')
+  .setIntegrationTypes([
+    ApplicationIntegrationType.GuildInstall,
+    ApplicationIntegrationType.UserInstall
+  ])
+  .setContexts([
+    InteractionContextType.Guild,
+    InteractionContextType.BotDM,
+    InteractionContextType.PrivateChannel
+  ]);
 
 /**
  * Thực thi lệnh /leaderboard

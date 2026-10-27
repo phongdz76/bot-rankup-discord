@@ -82,9 +82,14 @@ export async function initDiscordClient() {
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+      console.warn(`[Discord] [WARN] Khong tim thay handler cho lenh: /${interaction.commandName}`);
+      await interaction.reply({ content: 'Lệnh không tồn tại hoặc chưa được cập nhật!', ephemeral: true }).catch(() => null);
+      return;
+    }
 
     try {
+      console.log(`[Discord] [INFO] Dang thuc thi /${interaction.commandName} tu user ${interaction.user.tag} (${interaction.user.id})`);
       await command.execute(interaction);
     } catch (error) {
       console.error(`[Discord] [ERROR] Loi khi thuc thi lenh ${interaction.commandName}:`, error.message);
