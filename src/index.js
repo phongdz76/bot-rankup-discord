@@ -32,6 +32,14 @@ function handleGracefulShutdown(signal) {
 process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] [ERROR] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Process] [ERROR] Uncaught Exception:', error);
+});
+
 bootstrap().catch((error) => {
   console.error('[Bootstrap] [FATAL] Khoi dong bot that bai:', error);
 });
