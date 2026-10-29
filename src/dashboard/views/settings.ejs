@@ -53,6 +53,14 @@
       <section class="panel tab-panel" id="panel-leaderboard" role="tabpanel" aria-labelledby="tab-leaderboard" hidden>
         <div class="section-toolbar"><div><p class="eyebrow">Những người giữ nhịp cộng đồng</p><h2>Bảng xếp hạng</h2></div><button type="button" class="button secondary" id="refresh-leaderboard">Làm mới ↻</button></div>
         <div id="leaderboard" aria-live="polite"></div>
+        <nav id="leaderboard-pagination" class="leaderboard-pagination" aria-label="Phân trang bảng xếp hạng" hidden>
+          <div class="pagination-heading"><span id="leaderboard-range" class="muted"></span><span id="leaderboard-page" role="status"></span></div>
+          <div class="pagination-controls">
+            <button type="button" class="button secondary" id="leaderboard-prev" aria-label="Trang trước">← Trước</button>
+            <div id="leaderboard-pages" class="pagination-pages"></div>
+            <button type="button" class="button secondary" id="leaderboard-next" aria-label="Trang sau">Sau →</button>
+          </div>
+        </nav>
       </section>
       <section class="panel tab-panel" id="panel-advanced" role="tabpanel" aria-labelledby="tab-advanced" hidden>
         <p class="eyebrow">Thiết lập theo cách của bạn</p><h2>Tùy chọn khác</h2><h3>Kênh không tính điểm</h3><p class="field-help">Đánh dấu các kênh bạn muốn bỏ qua, chẳng hạn kênh dùng lệnh bot.</p><select multiple name="excludedChannels" data-channel="all" hidden></select><div class="choice-list" data-choice-list="excludedChannels" role="group" aria-label="Kênh không tính điểm"></div><h3>Vai trò không tính điểm</h3><p class="field-help">Thành viên có một trong những vai trò được chọn sẽ không nhận điểm.</p><select multiple name="excludedRoles" hidden></select><div class="choice-list" data-choice-list="excludedRoles" role="group" aria-label="Vai trò không tính điểm"></div>

@@ -3,14 +3,15 @@ import {
   ApplicationIntegrationType,
   InteractionContextType
 } from 'discord.js';
-import { User } from '../models/User.js';
+import { getGuildLeaderboard } from '../services/roleSync.js';
 import { createLeaderboardEmbed } from '../utils/embed.js';
 
 export const data = new SlashCommandBuilder()
   .setName('leaderboard')
-  .setDescription('Hiển thị bảng xếp hạng Top 10 thành viên năng nổ nhất server')
+  .setDescription('Xem bảng xếp hạng máy chủ, 10 thành viên mỗi trang')
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
-  .setContexts(InteractionContextType.Guild);
+  .setContexts(InteractionContextType.Guild)
+  .addIntegerOption(option => option.setName('page').setDescription('Trang bảng xếp hạng (10 người mỗi trang)').setMinValue(1));
 
 /**
  * Thực thi lệnh /leaderboard
@@ -20,15 +21,11 @@ export async function execute(interaction) {
   if (!interaction.inGuild()) return interaction.reply({ content: 'Dùng lệnh này trong server.', ephemeral: true });
   await interaction.deferReply();
 
-  const guildId = interaction.guild.id;
-
   try {
-    const topUsers = await User.find({ guildId })
-      .sort({ level: -1, xp: -1 })
-      .limit(10)
-      .lean();
+    const { entries: topUsers, page, totalPages } = await getGuildLeaderboard(interaction.guild, interaction.options.getInteger('page') || 1);
 
     const embed = createLeaderboardEmbed(interaction.guild.name, topUsers);
+    embed.setTitle(`Bảng xếp hạng — ${interaction.guild.name} · Trang ${page}/${totalPages}`);
     await interaction.editReply({ embeds: [embed] });
   } catch (error) {
     console.error(`[Command /leaderboard] [ERROR]:`, error.message);

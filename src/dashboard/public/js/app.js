@@ -82,23 +82,72 @@
     dirty = false; status.textContent = 'Tất cả thay đổi đã được lưu.';
     updatePreview();
   }
-  async function leaderboard() {
-    const container = document.querySelector('#leaderboard'); container.textContent = 'Đang tải…';
+  let leaderboardPage = 1, leaderboardTotalPages = 1, leaderboardLoading = false;
+  const pagination = document.querySelector('#leaderboard-pagination');
+  const previousPage = document.querySelector('#leaderboard-prev');
+  const nextPage = document.querySelector('#leaderboard-next');
+  const refreshLeaderboard = document.querySelector('#refresh-leaderboard');
+  function updatePageButtons() {
+    previousPage.disabled = leaderboardLoading || leaderboardPage <= 1;
+    nextPage.disabled = leaderboardLoading || leaderboardPage >= leaderboardTotalPages;
+    refreshLeaderboard.disabled = leaderboardLoading;
+    for (const button of document.querySelectorAll('#leaderboard-pages button')) button.disabled = leaderboardLoading;
+  }
+  function renderPageNumbers() {
+    const list = document.querySelector('#leaderboard-pages');
+    const restoreFocus = list.contains(document.activeElement); list.replaceChildren();
+    const pages = leaderboardTotalPages <= 5
+      ? Array.from({ length: leaderboardTotalPages }, (_, index) => index + 1)
+      : [...new Set([1, leaderboardPage - 1, leaderboardPage, leaderboardPage + 1, leaderboardTotalPages])]
+        .filter(page => page >= 1 && page <= leaderboardTotalPages).sort((a, b) => a - b);
+    let previous = 0;
+    for (const page of pages) {
+      if (previous && page - previous > 1) {
+        const gap = document.createElement('span'); gap.className = 'pagination-gap'; gap.textContent = '…'; gap.setAttribute('aria-hidden', 'true'); list.append(gap);
+      }
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'button secondary page-number';
+      button.textContent = page; button.setAttribute('aria-label', `Trang ${page}`);
+      if (page === leaderboardPage) button.setAttribute('aria-current', 'page');
+      button.addEventListener('click', () => { if (page !== leaderboardPage) void leaderboard(page); }); list.append(button); previous = page;
+    }
+    if (restoreFocus) list.querySelector('[aria-current="page"]')?.focus({ preventScroll: true });
+  }
+  async function leaderboard(requestedPage = leaderboardPage) {
+    if (leaderboardLoading) return;
+    leaderboardLoading = true; updatePageButtons();
+    const container = document.querySelector('#leaderboard');
+    if (!container.querySelector('table')) container.textContent = 'Đang tải…';
+    container.setAttribute('aria-busy', 'true');
     try {
-      const { entries } = await request('/leaderboard');
+      const { entries, memberCount, page, pageSize, totalPages } = await request(`/leaderboard?page=${requestedPage}`);
+      leaderboardPage = page; leaderboardTotalPages = totalPages;
       container.replaceChildren();
-      if (!entries.length) { container.textContent = 'Chưa có dữ liệu hoạt động. Cùng bắt đầu trò chuyện nhé!'; return; }
+      if (!entries.length) { pagination.hidden = true; container.textContent = 'Chưa có dữ liệu hoạt động. Cùng bắt đầu trò chuyện nhé!'; return; }
       const table = document.createElement('table');
       const head = document.createElement('thead'); const header = document.createElement('tr');
       for (const label of ['Hạng', 'Thành viên', 'Level', 'XP']) { const th = document.createElement('th'); th.textContent = label; header.append(th); }
       head.append(header); const body = document.createElement('tbody');
       for (const entry of entries) {
         const row = document.createElement('tr');
-        for (const value of [`#${entry.rank}`, entry.username, entry.level, entry.xp.toLocaleString('vi-VN')]) { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }
+        for (const [index, value] of [`#${entry.rank}`, entry.username, entry.level, entry.xp.toLocaleString('vi-VN')].entries()) {
+          const cell = document.createElement('td'); cell.textContent = value;
+          if (index === 1 && entry.roleName) { const role = document.createElement('small'); role.className = 'leaderboard-role'; role.textContent = entry.roleName; cell.append(role); }
+          row.append(cell);
+        }
         body.append(row);
       }
-      table.append(head, body); container.append(table);
-    } catch (error) { container.textContent = error.message; }
+      const summary = document.createElement('p'); summary.className = 'field-help';
+      summary.textContent = 'Xếp theo vai trò từ cao xuống thấp, sau đó theo XP trong cùng bậc';
+      table.append(head, body); container.append(summary, table);
+      document.querySelector('#leaderboard-range').textContent = `${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + entries.length} / ${memberCount} thành viên`;
+      document.querySelector('#leaderboard-page').textContent = `Trang ${page} / ${totalPages}`;
+      renderPageNumbers();
+      pagination.hidden = false;
+    } catch (error) {
+      if (container.querySelector('table')) notify(error.message, true);
+      else { pagination.hidden = true; container.textContent = error.message; }
+    }
+    finally { leaderboardLoading = false; container.setAttribute('aria-busy', 'false'); updatePageButtons(); }
   }
   const tabs = [...document.querySelectorAll('[data-tab]')];
   function selectTab(tab) {
@@ -127,7 +176,9 @@
       message.focus(); markDirty(); updatePreview();
     });
   }
-  document.querySelector('#refresh-leaderboard').addEventListener('click', leaderboard);
+  refreshLeaderboard.addEventListener('click', () => leaderboard());
+  previousPage.addEventListener('click', () => leaderboard(leaderboardPage - 1));
+  nextPage.addEventListener('click', () => leaderboard(leaderboardPage + 1));
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const invalid = [...form.elements].find(input => input.willValidate && !input.validity.valid);

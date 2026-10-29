@@ -1,6 +1,8 @@
-import { config } from '../config/index.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, getTotalXpForLevel, syncUserRoles, sendLevelUpNotification } from '../core/level.js';
+import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from '../core/level.js';
+import { syncMemberRoleLevel as ensureUser } from './roleSync.js';
+
+export { ensureUser };
 
 const pending = new Map();
 export function isExcluded(member, channelId, settings) {
@@ -8,22 +10,6 @@ export function isExcluded(member, channelId, settings) {
   const ids = [channelId, channel?.parentId, channel?.parent?.parentId].filter(Boolean);
   return ids.some(id => settings.excludedChannels.includes(id)) ||
     Boolean(member.roles?.cache.some(role => settings.excludedRoles.includes(role.id)));
-}
-
-export async function ensureUser(member, settings) {
-  // Chỉ nhập level từ role khi tạo hồ sơ lần đầu, trong server v1.
-  const seedLevel = member.guild.id === config.guildId
-    ? Math.max(0, ...settings.roleRewards.filter(r => member.roles.cache.has(r.roleId)).map(r => r.level)) : 0;
-  try {
-    return await User.findOneAndUpdate(
-      { guildId: member.guild.id, userId: member.id },
-      { $setOnInsert: { xp: getTotalXpForLevel(seedLevel), level: seedLevel } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
-  } catch (error) {
-    if (error.code !== 11000) throw error;
-    return User.findOne({ guildId: member.guild.id, userId: member.id });
-  }
 }
 
 // Tuần tự hóa tác dụng phụ chat/voice trên cùng thành viên. $inc và cooldown

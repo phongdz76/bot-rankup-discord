@@ -8,7 +8,7 @@ Bot Discord đa server, viết bằng Node.js ES Modules, discord.js v14 và Mon
 - Voice thưởng **2 XP/phút hợp lệ**, tối thiểu 2 người hợp lệ; bỏ qua bot, kênh AFK, người tắt/bị tắt mic hoặc tai nghe, người bị loại trừ và người không được nói trên sân khấu.
 - Hai chế độ: **Role Mapping** giữ role thưởng cao nhất; **Unlimited** tích lũy role đã đạt. Cả hai đều tiếp tục tăng level sau mốc cuối.
 - Welcome/goodbye tùy chỉnh kênh, nội dung, embed hoặc văn bản; biến `{user}`, `{username}`, `{server}`, `{memberCount}`.
-- `/rank [user]` trả ảnh PNG, `/leaderboard` trả top 10, `/help` hướng dẫn và `/setup` quản trị.
+- `/rank [user]` hiển thị cấp độ, thứ hạng và thanh XP màu bằng chữ, `/leaderboard [page]` phân trang 10 người/trang, `/help` hướng dẫn và `/setup` quản trị.
 - Dashboard: đăng nhập Discord, chọn server có quyền quản lý, cấu hình XP/role/kênh/loại trừ, xem trước lời chào và leaderboard.
 - Mỗi server có dữ liệu XP và cấu hình riêng. Cấu hình từ dashboard và `/setup` dùng chung một lớp kiểm tra.
 - Session lưu MongoDB, mã hóa dữ liệu session, OAuth state, cookie HttpOnly/SameSite, CSRF, giới hạn tần suất và kiểm tra lại quyền quản lý khi truy cập server.
@@ -73,6 +73,7 @@ Dashboard chỉ bật khi đủ Client ID, MongoDB URI, Client Secret và Sessio
 /rank
 /rank user:@thanhvien
 /leaderboard
+/leaderboard page:2
 /help
 
 /setup welcome enabled:True channel:#chao-mung message:Chào {user}!
@@ -100,7 +101,9 @@ Mục **Lệnh / Try My Commands** trên hồ sơ là giao diện của Discord.
 
 Role Mapping yêu cầu ít nhất một mốc. Muốn xóa mốc cuối, chuyển sang Unlimited trước. Mốc role được tự sắp theo level; role tích hợp, @everyone hoặc role nằm trên bot không dùng làm thưởng.
 
-Role được đồng bộ ở lần nhận XP tiếp theo; thành viên mới nhận mốc 0 khi tham gia. Xóa mốc/reset không tự thu hồi role đã cấp. Reset không xóa XP.
+Bot đối chiếu vai trò đang có với các mốc thưởng đã chọn để lấy cấp độ và XP tối thiểu, rồi tiếp tục cộng điểm từ đó. XP cao hơn mốc được giữ nguyên; điểm không bị cộng lặp khi đối chiếu lại. `GuildConfig.roleBaselines` khai báo vai trò đặc biệt chỉ dùng để đọc cấp có sẵn; bot không tự trao hay gỡ các vai trò này. Những vai trò khác được bỏ qua. Discord không lưu XP trong vai trò nên không thể suy ra số điểm chính xác của bot khác.
+
+Danh sách thành viên được đồng bộ khi bot khởi động, vào server mới hoặc đổi các mốc thưởng; người chưa từng chat cũng xuất hiện. Thay đổi vai trò, tên, tham gia/rời server được cập nhật qua sự kiện Discord. Bảng xếp hạng ưu tiên vị trí vai trò cấp bậc trên Discord, sau đó mốc cấp và XP; vai trò sở thích/quản trị không được dùng để xếp hạng. Chuyển trang chỉ đọc 10 hồ sơ từ MongoDB, kèm tổng số người/trang; dùng chỉ mục `{ guildId, inGuild, rolePosition, roleLevel, xp, userId }` để lọc và sắp xếp. Nút số trang giới hạn quanh trang đang xem và hai đầu danh sách. Vai trò thưởng được trao ở lần nhận XP tiếp theo; thành viên mới nhận mốc 0 khi tham gia. Xóa mốc/reset không tự thu hồi role đã cấp. Reset không xóa XP.
 
 Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính đủ phút ở trạng thái hợp lệ, không cộng bù thời gian bot tắt. Các kênh con/thread được loại trừ theo kênh hoặc danh mục cha.
 
@@ -113,7 +116,7 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 - `GET /api/guilds/:id/settings`: cấu hình và danh sách kênh/role.
 - `POST /api/guilds/:id/settings`: body `{ settings, revision }`, header `x-csrf-token`.
 - `POST /api/guilds/:id/reset`: body `{ confirm: true, revision }`, yêu cầu CSRF.
-- `GET /api/guilds/:id/leaderboard`: top 10, yêu cầu quyền quản lý.
+- `GET /api/guilds/:id/leaderboard?page=1`: 10 người/trang, trả `entries`, `memberCount`, `page`, `pageSize`, `totalPages`; yêu cầu quyền quản lý. Trang vượt cuối được đưa về trang cuối, trang không phải số nguyên dương nhận HTTP 400.
 - `GET /health`: HTTP 200 khi MongoDB và Discord đã kết nối, 503 nếu một trong hai chưa sẵn sàng.
 
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
@@ -127,7 +130,7 @@ Cấu hình có trường `revision`: khi hai cửa sổ cập nhật cùng lúc
 - Giữ nguyên collection `users`; không xóa XP hoặc chạy reset dữ liệu.
 - Giữ `GUILD_ID`, `ROLE_LVL0_ID`, `ROLE_LVL5_ID`, `ROLE_LVL15_ID`, `ROLE_LVL30_ID` và `LEVEL_UP_CHANNEL_ID` của server gốc. `GUILD_ID` chỉ xác định server nhập mặc định, không giới hạn bot vào server đó.
 - Nếu server chưa có GuildConfig, bot dùng mặc định. Server gốc nhập các role ID từ env; server mới dùng Unlimited, không có role thưởng hoặc kênh thông báo mặc định. Cooldown mặc định là **30 giây**.
-- Hồ sơ đã tồn tại giữ XP. Hồ sơ mới trong server gốc được khởi tạo từ các role ID đã cấu hình; không dò role theo tên hoặc ID hardcode trên mọi server.
+- Hồ sơ mới và hồ sơ cũ ở từng server được nâng lên tối thiểu bằng XP của vai trò cấp bậc đang có. Giữ nguyên XP vượt mốc, số tin nhắn và thời gian thoại. Chỉ dùng role ID đã cấu hình ở server đó, không dò theo tên. Vai trò đặc biệt cần nằm trong `roleBaselines` để quy đổi cấp mà không biến thành phần thưởng tự động.
 - Khi đã lưu GuildConfig, sửa trên dashboard hoặc `/setup`; thay đổi env không ghi đè cấu hình đã lưu.
 - Dùng `passport-oauth2` để tích hợp Discord trực tiếp, cùng OAuth state; không phụ thuộc `passport-discord`.
 
@@ -142,7 +145,7 @@ Test dùng MongoDB tạm bằng `mongodb-memory-server`, không kết nối Atla
 
 Test trình duyệt dùng Chrome/Edge đã cài trên Windows. Trên máy khác đặt `BROWSER_EXECUTABLE` đến Chromium tương thích; nếu không có trình duyệt, bài kiểm tra này được đánh dấu skip. CI chạy kiểm tra cú pháp và các bài test MongoDB/HTTP.
 
-Bao gồm: ngưỡng XP, cooldown 30 giây, đa server, cập nhật chat/voice đồng thời, role mapping/stacking, loại trừ, welcome, rank card PNG, quyền dashboard, CSRF, xung đột phiên bản và giao diện desktop/mobile.
+Bao gồm: ngưỡng XP, cooldown 30 giây, đa server, cập nhật chat/voice đồng thời, role mapping/stacking, loại trừ, welcome, hồ sơ cấp độ bằng chữ và thanh tiến độ màu, quyền dashboard, CSRF, xung đột phiên bản và giao diện desktop/mobile.
 
 ## Triển khai
 

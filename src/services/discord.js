@@ -4,12 +4,14 @@ import {
   REST,
   Routes,
   Collection,
-  Events
+  Events,
+  MessageFlags
 } from 'discord.js';
 import { config } from '../config/index.js';
 import { handleChatMessage } from '../core/chatXp.js';
 import { startVoiceXpTracker, handleVoiceStateUpdate } from '../core/voiceXp.js';
 import { handleMemberEvent } from '../core/welcome.js';
+import { syncClientGuilds, syncGuildMembersFromRoles, handleMemberRoleUpdate, handleMemberLeave, handleRoleRename, invalidateRoleSync } from './roleSync.js';
 import * as rankCommand from '../commands/rank.js';
 import * as leaderboardCommand from '../commands/leaderboard.js';
 import * as helpCommand from '../commands/help.js';
@@ -76,6 +78,7 @@ export async function initDiscordClient() {
     console.log(`[Discord] [INFO] Bot da dang nhap thanh cong voi tag: ${readyClient.user.tag}`);
     await registerSlashCommands();
     startVoiceXpTracker(readyClient);
+    void syncClientGuilds(readyClient);
   });
 
   // Sự kiện nhận tin nhắn mới
@@ -86,7 +89,15 @@ export async function initDiscordClient() {
   const safeEvent = handler => (...args) => Promise.resolve(handler(...args))
     .catch(error => console.error('[Discord event]', error.message));
   client.on(Events.GuildMemberAdd, safeEvent(member => handleMemberEvent(member, 'welcome')));
-  client.on(Events.GuildMemberRemove, safeEvent(member => handleMemberEvent(member, 'goodbye')));
+  client.on(Events.GuildMemberRemove, safeEvent(async member => {
+    await handleMemberLeave(member);
+    await handleMemberEvent(member, 'goodbye');
+  }));
+  client.on(Events.GuildMemberUpdate, safeEvent(handleMemberRoleUpdate));
+  client.on(Events.GuildMemberAvailable, safeEvent(member => handleMemberRoleUpdate(null, member)));
+  client.on(Events.GuildRoleUpdate, safeEvent(handleRoleRename));
+  client.on(Events.GuildCreate, safeEvent(syncGuildMembersFromRoles));
+  client.on(Events.GuildDelete, guild => invalidateRoleSync(guild.id));
   client.on(Events.VoiceStateUpdate, safeEvent(handleVoiceStateUpdate));
 
   // Sự kiện tương tác Slash Command
@@ -105,11 +116,15 @@ export async function initDiscordClient() {
       await command.execute(interaction);
     } catch (error) {
       console.error(`[Discord] [ERROR] Loi khi thuc thi lenh ${interaction.commandName}:`, error.message);
+      // Token hết hạn hoặc một kết nối bot khác đã nhận lệnh: không gửi phản hồi lần nữa.
+      if ([10062, 40060].includes(error.code)) return;
       const replyOptions = {
-        content: 'Da co loi xay ra khi thuc hien lenh nay.',
-        ephemeral: true
+        content: 'Không thể thực hiện lệnh lúc này. Hãy thử lại sau.',
+        flags: MessageFlags.Ephemeral
       };
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({ content: replyOptions.content, embeds: [], components: [] }).catch(() => null);
+      } else if (interaction.replied) {
         await interaction.followUp(replyOptions).catch(() => null);
       } else {
         await interaction.reply(replyOptions).catch(() => null);

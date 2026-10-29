@@ -3,7 +3,7 @@ import { rateLimit } from 'express-rate-limit';
 import { requireLogin, requireGuildManager, csrfProtection } from '../middleware/auth.js';
 import { getGuildConfig, saveGuildConfig } from '../../services/guildConfig.js';
 import { getDefaultGuildConfig } from '../../config/index.js';
-import { User } from '../../models/User.js';
+import { getGuildLeaderboard } from '../../services/roleSync.js';
 
 export function settingsRoutes(client) {
   const router = Router();
@@ -30,13 +30,8 @@ export function settingsRoutes(client) {
     res.json({ settings: await saveGuildConfig(req.guild, getDefaultGuildConfig(req.guild.id), req.body.revision) });
   }));
   router.get('/api/guilds/:id/leaderboard', route(async (req, res) => {
-    const users = await User.find({ guildId: req.guild.id }).sort({ level: -1, xp: -1 }).limit(10)
-      .select('userId level xp messageCount totalVoiceMinutes -_id').lean();
-    const entries = await Promise.all(users.map(async (user, index) => {
-      const member = await req.guild.members.fetch(user.userId).catch(() => null);
-      return { ...user, rank: index + 1, username: member?.displayName || user.userId };
-    }));
-    res.json({ entries });
+    const page = req.query.page === undefined ? 1 : Number(req.query.page);
+    res.json(await getGuildLeaderboard(req.guild, page));
   }));
   return router;
 }

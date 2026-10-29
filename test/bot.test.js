@@ -15,11 +15,12 @@ import { GuildConfig } from '../src/models/GuildConfig.js';
 import { User } from '../src/models/User.js';
 import { getGuildConfig, saveGuildConfig, validateSettings } from '../src/services/guildConfig.js';
 import { awardXp, ensureUser } from '../src/services/xp.js';
+import { syncGuildMembersFromRoles, getGuildLeaderboard, handleMemberRoleUpdate, handleMemberLeave, handleRoleRename, invalidateRoleSync } from '../src/services/roleSync.js';
 import { calculateLevelData, getTotalXpForLevel, syncUserRoles } from '../src/core/level.js';
 import { eligibleVoiceMembers, processAllVoiceChannels, handleVoiceStateUpdate, stopVoiceXpTracker } from '../src/core/voiceXp.js';
 import { handleChatMessage } from '../src/core/chatXp.js';
 import { handleMemberEvent, renderMemberMessage } from '../src/core/welcome.js';
-import { createRankCard } from '../src/utils/rankCard.js';
+import { createProgressBar } from '../src/utils/embed.js';
 import { createWebApp } from '../src/server.js';
 import * as setupCommand from '../src/commands/setup.js';
 import * as rankCommand from '../src/commands/rank.js';
@@ -44,7 +45,7 @@ before(async () => {
   await Promise.all([User.init(), GuildConfig.init()]);
 });
 after(async () => { stopVoiceXpTracker(); await mongoose.disconnect(); await mongo?.stop(); });
-beforeEach(async () => { stopVoiceXpTracker(); await Promise.all([User.deleteMany({}), GuildConfig.deleteMany({})]); });
+beforeEach(async () => { stopVoiceXpTracker(); invalidateRoleSync(); await Promise.all([User.deleteMany({}), GuildConfig.deleteMany({})]); });
 
 function fixture(id = guildId) {
   const sent = [];
@@ -64,7 +65,8 @@ function fixture(id = guildId) {
   };
   guild.roles = { cache: roles, fetch: async () => roles };
   guild.channels = { cache: new Collection([[channelId, channel]]), fetch: async id => id ? guild.channels.cache.get(id) : guild.channels.cache };
-  guild.members = { me: { permissions }, fetchMe: async () => ({ permissions }), fetch: async () => member };
+  guild.members = { me: { permissions }, fetchMe: async () => ({ permissions }), fetch: async () => member,
+    list: async () => new Collection([[member.id, member]]) };
   const client = { isReady: () => true, guilds: { cache: new Collection([[id, guild]]) } };
   return { client, guild, member, channel, roles, sent };
 }
@@ -141,17 +143,215 @@ test('simultaneous chat and voice preserve all increments and level', async () =
   assert.equal(user.messageCount, 1); assert.equal(user.totalVoiceMinutes, 5);
 });
 
-test('legacy role import only seeds once and never resets earned XP', async () => {
-  const prior = config.guildId; config.guildId = guildId;
-  try {
-    const { member, roles } = fixture(); member.roles.cache.set(roleId, roles.get(roleId));
-    const settings = getDefaultGuildConfig(otherGuildId); settings.roleRewards = [{ level: 5, roleId }];
-    assert.equal((await ensureUser(member, settings)).xp, 5000);
-    await User.updateOne({ guildId, userId }, { $set: { xp: 6000, level: 5 } });
-    assert.equal((await ensureUser(member, settings)).xp, 6000);
-    const other = fixture(otherGuildId); other.member.roles.cache.set(roleId, roles.get(roleId));
-    assert.equal((await ensureUser(other.member, settings)).xp, 0);
-  } finally { config.guildId = prior; }
+test('configured roles seed profiles in every guild, preserve progress and never add the baseline twice', async () => {
+  const { member, roles } = fixture(); member.roles.cache.set(roleId, roles.get(roleId));
+  const settings = getDefaultGuildConfig(otherGuildId); settings.roleRewards = [{ level: 5, roleId }];
+  assert.equal((await ensureUser(member, settings)).xp, 5000);
+  await User.updateOne({ guildId, userId }, { $set: { xp: 6000, level: 5 } });
+  assert.equal((await ensureUser(member, settings)).xp, 6000);
+  assert.equal((await ensureUser(member, settings)).xp, 6000);
+  const other = fixture(otherGuildId); other.member.roles.cache.set(roleId, roles.get(roleId));
+  assert.equal((await ensureUser(other.member, settings)).xp, 5000);
+  assert.equal((await User.findOne({ guildId, userId })).xp, 6000);
+});
+
+test('existing profiles take the highest configured role floor and continue earning XP', async () => {
+  const { member, roles } = fixture();
+  member.roles.cache.set(roleId, roles.get(roleId)); member.roles.cache.set(role2Id, roles.get(role2Id));
+  const settings = getDefaultGuildConfig(guildId);
+  settings.roleRewards = [{ level: 5, roleId }, { level: 15, roleId: role2Id }];
+  await User.create({ guildId, userId, xp: 29, level: 0, messageCount: 7, totalVoiceMinutes: 3 });
+  const synced = await ensureUser(member, settings);
+  assert.equal(synced.xp, 76250); assert.equal(synced.level, 15);
+  assert.equal(synced.messageCount, 7); assert.equal(synced.totalVoiceMinutes, 3);
+  await awardXp(member, settings, { source: 'chat', xp: 12 });
+  await awardXp(member, settings, { source: 'voice', xp: 2 });
+  const user = await ensureUser(member, settings);
+  assert.equal(user.xp, 76264); assert.equal(user.level, 15);
+  member.roles.cache.clear();
+  assert.equal((await ensureUser(member, settings)).xp, 76264);
+});
+
+test('unconfigured special roles are neither imported nor changed', async () => {
+  const { member } = fixture();
+  const specialId = '999999999999999999'; member.roles.cache.set(specialId, { id: specialId, name: 'Owner only' });
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 30, roleId }];
+  const user = await ensureUser(member, settings);
+  assert.equal(user.xp, 0); assert.equal(user.level, 0);
+  await syncUserRoles(member, 0, settings);
+  assert(member.roles.cache.has(specialId));
+});
+
+test('read-only special roles seed the same tier without ever granting or removing the special role', async () => {
+  const { guild, member, roles } = fixture();
+  const specialId = '999999999999999999'; roles.set(specialId, { id: specialId, name: 'Private title', position: 20 });
+  member.roles.cache.set(specialId, roles.get(specialId));
+  const settings = getDefaultGuildConfig(guildId);
+  settings.roleRewards = [{ level: 5, roleId }]; settings.roleBaselines = [{ level: 30, roleId: specialId }];
+  await GuildConfig.create(settings);
+  const user = await ensureUser(member, settings);
+  assert.equal(user.level, 30); assert.equal(user.xp, 523750); assert.equal(user.roleLevel, 30);
+  await syncUserRoles(member, 30, settings);
+  assert(member.roles.cache.has(specialId));
+  const other = { ...member, id: '777777777777777777', roles: {
+    cache: new Collection(), add: async id => assert.notEqual(id, specialId), remove: async id => assert.notEqual(id, specialId),
+  } };
+  await syncUserRoles(other, 30, settings);
+  const saved = await saveGuildConfig(guild, settings, 0);
+  assert.deepEqual(saved.roleBaselines.map(({level, roleId}) => ({level, roleId})), settings.roleBaselines);
+});
+
+test('leaderboard sorts current rank roles before XP, preserves progress after role removal and updates role names', async () => {
+  const { guild, member, roles } = fixture();
+  roles.get(roleId).position = 10; roles.get(role2Id).position = 20;
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 5, roleId }, { level: 15, roleId: role2Id }];
+  await GuildConfig.create(settings);
+  member.roles.cache.set(roleId, roles.get(roleId));
+  const senior = { ...member, id: '777777777777777777', roles: { cache: new Collection([[role2Id, roles.get(role2Id)]]) } };
+  guild.members.list = async () => new Collection([[member.id, member], [senior.id, senior]]);
+  await User.create({guildId, userId:member.id, xp:999999, level:37});
+  const board = await getGuildLeaderboard(guild);
+  assert.deepEqual(board.entries.map(item => item.userId), [senior.id, member.id]);
+  assert.equal(board.entries[0].roleName, 'Kỳ cựu');
+  assert.equal(board.entries[1].xp, 999999);
+  await handleRoleRename({name:'Kỳ cựu'}, {id:role2Id, guild, name:'Senior renamed'});
+  assert.equal((await getGuildLeaderboard(guild)).entries[0].roleName, 'Senior renamed');
+  roles.get(roleId).position = 30;
+  await handleRoleRename({name:'Tân binh',position:10}, {...roles.get(roleId),guild});
+  assert.equal((await getGuildLeaderboard(guild)).entries[0].userId, member.id);
+  senior.roles.cache.clear();
+  await handleMemberRoleUpdate(member, senior);
+  const changed = await getGuildLeaderboard(guild);
+  assert.deepEqual(changed.entries.map(item => item.userId), [member.id, senior.id]);
+  assert.equal(changed.entries[1].roleLevel, 0); assert.equal(changed.entries[1].xp, 76250);
+});
+
+test('guild sync imports inactive members, skips bots and keeps departed users off leaderboard', async () => {
+  const { guild, member, roles } = fixture();
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 5, roleId }, { level: 15, roleId: role2Id }];
+  await GuildConfig.create(settings);
+  const inactive = { ...member, id: '777777777777777777', displayName: 'Inactive member', roles: { cache: new Collection([[role2Id, roles.get(role2Id)]]) } };
+  const bot = { ...member, id: '888888888888888888', user: { ...member.user, bot: true } };
+  member.roles.cache.set(roleId, roles.get(roleId));
+  guild.members.list = async () => new Collection([[member.id, member], [inactive.id, inactive], [bot.id, bot]]);
+  await User.create({ guildId, userId: member.id, xp: 6000, level: 5 });
+  await User.create({ guildId, userId: '999999999999999999', xp: 999999, level: 37 });
+  const first = await getGuildLeaderboard(guild);
+  assert.equal(first.memberCount, 2);
+  assert.deepEqual(first.entries.map(item => item.userId), [inactive.id, member.id]);
+  assert.equal(first.entries[0].xp, 76250); assert.equal(first.entries[0].username, 'Inactive member');
+  assert.equal(first.entries[1].xp, 6000);
+  assert.equal(await User.countDocuments({ guildId, userId: bot.id }), 0);
+  const again = await getGuildLeaderboard(guild);
+  assert.deepEqual(again.entries, first.entries);
+});
+
+test('guild member import paginates beyond 1000 members', async () => {
+  const { guild, member } = fixture();
+  const bots = new Collection(Array.from({ length: 1000 }, (_, index) => {
+    const id = String(700000000000000000n + BigInt(index));
+    return [id, { ...member, id, user: { bot: true } }];
+  }));
+  const calls = [];
+  guild.members.list = async options => {
+    calls.push(options);
+    return options.after ? new Collection([[member.id, member]]) : bots;
+  };
+  const result = await syncGuildMembersFromRoles(guild);
+  assert.equal(result.memberCount, 1);
+  assert.equal(calls.length, 2); assert.equal(calls[1].after, bots.lastKey());
+  assert(calls.every(options => options.cache === false));
+  assert.equal(await User.countDocuments({ guildId }), 1);
+});
+
+test('leaderboard returns 10 per page with stable ranks, isolated guilds and no repeated Discord scan', async () => {
+  const { guild, member, roles } = fixture();
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 5, roleId }];
+  await GuildConfig.create(settings);
+  const members = new Collection(Array.from({ length: 25 }, (_, index) => {
+    const id = String(700000000000000000n + BigInt(index));
+    return [id, { ...member, id, displayName: `Member ${index}`, roles: { cache: new Collection([[roleId, roles.get(roleId)]]) } }];
+  }));
+  let scans = 0;
+  guild.members.list = async () => { scans++; return members; };
+  await User.create({ guildId: otherGuildId, userId, xp: 999999, inGuild: true });
+  const pages = await Promise.all([1, 2, 3].map(page => getGuildLeaderboard(guild, page)));
+  assert.equal(scans, 1);
+  assert.deepEqual(pages.map(page => page.entries.length), [10, 10, 5]);
+  assert(pages.every(page => page.memberCount === 25 && page.pageSize === 10 && page.totalPages === 3));
+  assert.deepEqual(pages.flatMap(page => page.entries.map(entry => entry.rank)), Array.from({ length: 25 }, (_, i) => i + 1));
+  assert.deepEqual(pages.flatMap(page => page.entries.map(entry => entry.userId)), [...members.keys()]);
+  assert(pages.flatMap(page => page.entries).every(entry => entry.xp === 5000));
+  assert.equal((await getGuildLeaderboard(guild, 999)).page, 3);
+  assert.equal(scans, 1);
+  let reply;
+  await leaderboardCommand.execute({
+    inGuild: () => true, guild, options: { getInteger: () => 2 },
+    deferReply: async () => {}, editReply: async payload => { reply = payload; },
+  });
+  assert.match(reply.embeds[0].data.title, /Trang 2\/3/);
+  assert(reply.embeds[0].data.description.startsWith('**#11**'));
+  assert.equal(scans, 1);
+  for (const page of [0, -1, 1.5, NaN, Infinity]) {
+    await assert.rejects(getGuildLeaderboard(guild, page), error => error.status === 400);
+  }
+});
+
+test('cached leaderboard updates membership, names and role milestones without scanning on every page', async () => {
+  const { guild, member, roles } = fixture();
+  member.roles.cache.set(roleId, roles.get(roleId));
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 5, roleId }];
+  await GuildConfig.create(settings);
+  let scans = 0;
+  guild.members.list = async () => { scans++; return new Collection([[member.id, member]]); };
+  assert.equal((await getGuildLeaderboard(guild)).entries[0].xp, 5000);
+  member.displayName = 'Renamed member';
+  await handleMemberRoleUpdate(member, member);
+  assert.equal((await getGuildLeaderboard(guild)).entries[0].username, 'Renamed member');
+  assert.equal(scans, 1);
+  await GuildConfig.updateOne({ guildId }, { $set: { 'roleRewards.0.level': 15 } });
+  assert.equal((await getGuildLeaderboard(guild)).entries[0].xp, 76250);
+  assert.equal(scans, 2);
+  await handleMemberLeave(member);
+  const empty = await getGuildLeaderboard(guild);
+  assert.equal(empty.memberCount, 0); assert.equal(empty.page, 1); assert.equal(empty.totalPages, 1);
+  assert.deepEqual(empty.entries, []); assert.equal(scans, 2);
+  assert.equal((await User.findOne({ guildId, userId })).xp, 76250);
+});
+
+test('role sync racing with chat and voice never overwrites increments', async () => {
+  const { guild, member, roles } = fixture();
+  member.roles.cache.set(role2Id, roles.get(role2Id));
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 15, roleId: role2Id }];
+  await GuildConfig.create(settings);
+  await ensureUser(member, settings);
+  await Promise.all([
+    syncGuildMembersFromRoles(guild),
+    awardXp(member, settings, { source: 'chat', xp: 12 }),
+    awardXp(member, settings, { source: 'voice', xp: 2 }),
+    ensureUser(member, settings),
+  ]);
+  assert.equal((await User.findOne({ guildId, userId })).xp, 76264);
+});
+
+test('manual role changes raise an existing profile without resetting activity counters', async () => {
+  const { member, roles } = fixture();
+  const settings = getDefaultGuildConfig(guildId); settings.roleRewards = [{ level: 15, roleId: role2Id }];
+  await GuildConfig.create(settings);
+  await User.create({ guildId, userId, xp: 42, level: 0, messageCount: 4 });
+  const oldMember = { ...member, roles: { cache: new Collection() } };
+  member.roles.cache.set(role2Id, roles.get(role2Id));
+  await handleMemberRoleUpdate(oldMember, member);
+  const updated = await User.findOne({ guildId, userId });
+  assert.equal(updated.xp, 76250); assert.equal(updated.messageCount, 4);
+});
+
+test('role reconciliation does not downgrade a higher configured role from stale XP', async () => {
+  const { member, roles } = fixture();
+  member.roles.cache.set(role2Id, roles.get(role2Id));
+  const settings = { levelMode: 'role_mapping', roleRewards: [{ level: 0, roleId }, { level: 15, roleId: role2Id }] };
+  await syncUserRoles(member, 0, settings);
+  assert(member.roles.cache.has(role2Id)); assert(!member.roles.cache.has(roleId));
 });
 
 test('role mapping replaces only configured rewards; unlimited stacks rewards', async () => {
@@ -213,12 +413,27 @@ test('welcome renders variables safely, restricts mentions and assigns level-zer
   assert(renderMemberMessage('{username}', member).includes('Bạn'));
 });
 
-test('rank card generates a PNG even when avatar CDN is unavailable', async t => {
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: false }));
-  const { member } = fixture();
-  const png = await createRankCard({ user: member.user, member, userDoc: { xp: 350 }, levelData: calculateLevelData(350), serverRank: 1 });
-  assert.equal(png.subarray(1, 4).toString(), 'PNG');
-  assert(png.length > 1000);
+test('rank replies with a text embed and colored progress without generating images or fetching avatars', async t => {
+  t.mock.method(globalThis, 'fetch', async () => { assert.fail('Rank must not download an avatar'); });
+  const { guild, member } = fixture();
+  await User.create({ guildId, userId, xp: 575, level: 1, messageCount: 5, totalVoiceMinutes: 6 });
+  let reply;
+  await rankCommand.execute({
+    inGuild: () => true, guildId, guild, user: member.user, options: { getUser: () => null },
+    deferReply: async () => {}, editReply: async payload => { reply = payload; },
+  });
+  assert.equal(reply.files, undefined);
+  const embed = reply.embeds[0].toJSON();
+  assert.equal(embed.image, undefined); assert.equal(embed.author.name, member.displayName);
+  const progress = embed.fields.find(field => field.name === 'Tiến độ lên cấp 2');
+  assert(progress.value.includes('🟧'.repeat(5) + '⬛'.repeat(5)));
+  assert(progress.value.includes('275 / 550 XP'));
+  assert.equal(embed.fields.find(field => field.name === 'Thứ hạng').value, '#1');
+  assert(createProgressBar(78, 51300).includes('0,2%'));
+  assert(createProgressBar(78, 51300).startsWith('🔸'));
+  assert(createProgressBar(0, 550).includes('0%'));
+  assert(createProgressBar(550, 550).startsWith('🟧'.repeat(10)));
+  assert.equal((await User.findOne({ guildId, userId })).xp, 575);
 });
 
 test('slash commands serialize and server-only commands reject DM context', async () => {
@@ -287,7 +502,15 @@ test('dashboard enforces authentication, fresh guild permission, CSRF, revisions
   await request(app).post(url).set('Cookie', cookie).set('x-csrf-token', csrf).send({ settings: body.body.settings, revision: 0 }).expect(200);
   await request(app).post(url).set('Cookie', cookie).set('x-csrf-token', csrf).send({ settings: body.body.settings, revision: 0 }).expect(409);
   await request(app).get(`/api/guilds/${otherGuildId}/settings`).set('Cookie', cookie).expect(404);
+  const board = `/api/guilds/${guildId}/leaderboard`;
+  await request(app).get(board).expect(401);
+  const firstPage = await request(app).get(`${board}?page=1`).set('Cookie', cookie).expect(200);
+  assert.equal(firstPage.body.page, 1); assert.equal(firstPage.body.pageSize, 10);
+  for (const page of ['0', '-1', '1.5', 'NaN', 'Infinity']) {
+    await request(app).get(`${board}?page=${page}`).set('Cookie', cookie).expect(400);
+  }
   member.permissions = new PermissionsBitField([]);
+  await request(app).get(board).set('Cookie', cookie).expect(403);
   await request(app).get(url).set('Cookie', cookie).expect(403);
   member.permissions = new PermissionsBitField([PermissionFlagsBits.ManageGuild]);
   const login = await request(app).get('/auth/discord').expect(302);
@@ -354,7 +577,13 @@ const browserExecutable = [process.env.BROWSER_EXECUTABLE,
 ].find(path => path && existsSync(path));
 
 test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard and reset', { skip: !browserExecutable }, async () => {
-  const { client, guild } = fixture();
+  const { client, guild, member } = fixture();
+  const members = new Collection([[member.id, member], ...Array.from({ length: 37 }, (_, index) => {
+    const id = String(700000000000000000n + BigInt(index));
+    return [id, { ...member, id, displayName: `Member ${index}` }];
+  })]);
+  let memberScans = 0;
+  guild.members.list = async () => { memberScans++; return members; };
   const store = new session.MemoryStore();
   const secret = 'browser-test-session-secret-32-characters';
   const sid = 'browser-session'; const csrf = 'b'.repeat(64);
@@ -437,7 +666,7 @@ test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard an
     assert.equal((await getGuildConfig(guildId)).roleRewards[0].roleId, roleId);
     await User.create({ userId, guildId, xp: 5000, level: 5 });
     await page.locator('[data-tab="leaderboard"]').click();
-    await page.locator('#leaderboard tbody tr').waitFor();
+    await page.locator('#leaderboard tbody tr').first().waitFor();
     const refresh = page.locator('#refresh-leaderboard');
     await refresh.focus();
     assert.equal(await refresh.evaluate(node => getComputedStyle(node).outlineStyle), 'none');
@@ -448,6 +677,38 @@ test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard an
     assert(boardSpacing.contentTop - boardSpacing.buttonBottom >= 24);
     if (process.env.CAPTURE_UI === '1') await page.locator('#panel-leaderboard').screenshot({ path: '.cache/qa/leaderboard-focus-mobile.png' });
     assert.match(await page.locator('#leaderboard').textContent(), /Bạn & tôi/);
+    assert.equal(await page.locator('#leaderboard tbody tr').count(), 10);
+    assert.equal(await page.locator('#leaderboard-page').textContent(), 'Trang 1 / 4');
+    assert.equal(await page.locator('#leaderboard-pages button').count(), 4);
+    assert.equal(await page.locator('#leaderboard-pages [aria-current="page"]').textContent(), '1');
+    assert(await page.locator('#leaderboard-prev').isDisabled());
+    await page.locator('#leaderboard-next').click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard-page').textContent === 'Trang 2 / 4');
+    await page.locator('#leaderboard-pagination').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#leaderboard tbody tr').count(), 10);
+    assert.equal(await page.locator('#leaderboard tbody tr td').first().textContent(), '#11');
+    await page.locator('#leaderboard-next').click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard-page').textContent === 'Trang 3 / 4');
+    await page.locator('#leaderboard-pagination').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#leaderboard tbody tr').count(), 10);
+    await page.locator('#leaderboard-pages').getByRole('button', {name:'Trang 4',exact:true}).click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard-page').textContent === 'Trang 4 / 4');
+    await page.locator('#leaderboard-pagination').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#leaderboard tbody tr').count(), 8);
+    assert(await page.locator('#leaderboard-next').isDisabled());
+    assert.equal(await page.locator('#leaderboard-range').textContent(), '31–38 / 38 thành viên');
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.locator('#leaderboard-prev').click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard-page').textContent === 'Trang 3 / 4');
+    await page.locator('#leaderboard-pagination').waitFor({ state: 'visible' });
+    await page.locator('#leaderboard-pages').getByRole('button', {name:'Trang 2',exact:true}).click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard-page').textContent === 'Trang 2 / 4');
+    await page.locator('#leaderboard-pagination').waitFor({ state: 'visible' });
+    await page.locator('#refresh-leaderboard').click();
+    await page.waitForFunction(() => document.querySelector('#leaderboard').getAttribute('aria-busy') === 'false');
+    assert.equal(await page.locator('#leaderboard tbody tr td').first().textContent(), '#11');
+    assert.equal(memberScans, 1);
+    if (process.env.CAPTURE_UI === '1') await page.locator('#panel-leaderboard').screenshot({ path: '.cache/qa/leaderboard-pagination-mobile.png' });
     await page.locator('[data-tab="advanced"]').click();
     await page.locator('[data-choice-list="excludedChannels"] input[type="checkbox"]').first().check();
     await page.locator('#save-settings').click();

@@ -43,7 +43,7 @@ export function getDefaultGuildConfig(guildId) {
     .map(level => ({ level, roleId: config.roles[`lvl${level}`], roleName: `Level ${level}` })) : [];
   return {
     guildId, levelMode: roleRewards.length ? 'role_mapping' : 'unlimited',
-    levelUpChannelId: legacy ? config.levelUpChannelId || null : null, roleRewards,
+    levelUpChannelId: legacy ? config.levelUpChannelId || null : null, roleRewards, roleBaselines: [],
     welcome: {
       enabled: false, channelId: null, useEmbed: true,
       message: '🎊 Chào mừng {user} đã gia nhập **{server}**! Bạn là thành viên thứ **#{memberCount}**. Hãy bắt đầu trò chuyện để tích lũy kinh nghiệm nhé~',

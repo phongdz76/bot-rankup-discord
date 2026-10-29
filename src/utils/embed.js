@@ -3,19 +3,19 @@ import { config } from '../config/index.js';
 import { formatMinutes } from './time.js';
 
 /**
- * Vẽ thanh tiến trình XP dạng ký tự đơn giản
+ * Thanh tiến độ bằng emoji màu, hiển thị trực tiếp trên Discord.
  * @param {number} current
  * @param {number} max
  * @param {number} length
  * @returns {string}
  */
 export function createProgressBar(current, max, length = 10) {
-  if (max <= 0) return `[${'█'.repeat(length)}] 100%`;
-  const percent = Math.min(Math.max(current / max, 0), 1);
-  const filled = Math.round(percent * length);
-  const empty = length - filled;
-  const bar = '█'.repeat(filled) + '░'.repeat(empty);
-  return `[${bar}] ${Math.round(percent * 100)}%`;
+  const percent = max <= 0 ? 1 : Math.min(Math.max(current / max, 0), 1);
+  const filled = Math.floor(percent * length);
+  const partial = filled < length && percent * length > filled ? '🔸' : '';
+  const bar = '🟧'.repeat(filled) + partial + '⬛'.repeat(length - filled - (partial ? 1 : 0));
+  const label = percent > 0 && percent < 0.001 ? '<0,1' : (percent * 100).toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+  return `${bar} **${label}%**`;
 }
 
 /**
@@ -28,12 +28,11 @@ export function createRankEmbed({ user, member, userDoc, levelData, rankTier, se
   const remainingXp = Math.max(levelData.nextLevelXp - levelData.currentXp, 0);
 
   const embed = new EmbedBuilder()
-    .setColor(rankTier?.color || config.theme.color)
+    .setColor(member?.roles.cache.get(userDoc?.rankRoleId)?.color || 0xe99b83)
     .setAuthor({
-      name: `Hồ Sơ Thành Viên: ${user.tag}`,
-      iconURL: user.displayAvatarURL({ dynamic: true })
+      name: member?.displayName || user.globalName || user.username,
+      iconURL: user.displayAvatarURL({ extension: 'png' })
     })
-    .setThumbnail(user.displayAvatarURL({ dynamic: true, size: 256 }))
     .addFields(
       {
         name: 'Cấp độ',
@@ -41,22 +40,22 @@ export function createRankEmbed({ user, member, userDoc, levelData, rankTier, se
         inline: true
       },
       {
-        name: 'Hạng Server',
+        name: 'Thứ hạng',
         value: `#${serverRank || 1}`,
         inline: true
       },
       {
-        name: 'Danh hiệu',
-        value: `${rankTier?.name || 'Chưa xếp hạng'}`,
+        name: 'Vai trò',
+        value: `${userDoc?.rankRoleName || rankTier?.name || 'Chưa có vai trò cấp bậc'}`,
         inline: true
       },
       {
-        name: 'Tiến độ kinh nghiệm',
-        value: `${progressBar}\nXP hiện tại: **${levelData.currentXp.toLocaleString()} / ${levelData.nextLevelXp.toLocaleString()}** (Còn thiếu: ${remainingXp.toLocaleString()} XP)\nTổng tích lũy: **${(userDoc?.xp || 0).toLocaleString()} XP**`
+        name: `Tiến độ lên cấp ${levelData.level + 1}`,
+        value: `${progressBar}\n**${levelData.currentXp.toLocaleString('vi-VN')} / ${levelData.nextLevelXp.toLocaleString('vi-VN')} XP**\nCòn ${remainingXp.toLocaleString('vi-VN')} XP để lên cấp tiếp theo`
       },
       {
         name: 'Thống kê hoạt động',
-        value: `Tin nhắn đã gửi: **${userDoc?.messageCount || 0}**\nThời gian Voice: **${formatMinutes(userDoc?.totalVoiceMinutes || 0)}**`
+        value: `**${(userDoc?.xp || 0).toLocaleString('vi-VN')} XP** tích lũy · **${userDoc?.messageCount || 0}** tin nhắn · Thoại **${formatMinutes(userDoc?.totalVoiceMinutes || 0)}**`
       }
     )
     .setFooter({ text: config.theme.footerText })
@@ -84,7 +83,7 @@ export function createLeaderboardEmbed(guildName, topUsers) {
   }
 
   const lines = topUsers.map((item, index) => {
-    const rank = index + 1;
+    const rank = item.rank || index + 1;
     return `**#${rank}** <@${item.userId}> - Level **${item.level}** (${item.xp.toLocaleString()} XP) | ${item.messageCount || 0} tin nhắn | ${formatMinutes(item.totalVoiceMinutes || 0)}`;
   });
 

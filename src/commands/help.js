@@ -20,8 +20,8 @@ export async function execute(interaction) {
   const voice = settings?.xpSettings.voice;
   const embed = new EmbedBuilder().setColor(config.theme.color).setTitle('Hutao-Chan • Hướng dẫn')
     .setDescription([
-      `${mention('rank')} [user] — Rank card và thống kê hoạt động trong server.`,
-      `${mention('leaderboard')} — Top 10 thành viên trong server.`,
+      `${mention('rank')} [user] — Cấp độ, thứ hạng và thanh tiến độ XP.`,
+      `${mention('leaderboard')} — Bảng xếp hạng, 10 người mỗi trang. Chọn page để xem trang khác.`,
       `${mention('setup')} — Cấu hình server (cần quyền Quản lý Server).`,
       `${mention('help')} — Xem hướng dẫn này.`,
       '',

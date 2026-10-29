@@ -29,9 +29,25 @@ export function getRankTierForLevel(level, settings = { roleRewards: [] }) {
   return tier ? { ...tier, name: tier.roleName || `Level ${tier.level}` } : null;
 }
 
+function getMappedRoles(member, settings) {
+  return [...settings.roleRewards, ...(settings.roleBaselines || [])]
+    .filter(reward => member.roles.cache.has(reward.roleId));
+}
+
+export function getMappedRole(member, settings) {
+  return getMappedRoles(member, settings).sort((a, b) =>
+    (member.roles.cache.get(b.roleId)?.position || 0) - (member.roles.cache.get(a.roleId)?.position || 0) || b.level - a.level)[0] || null;
+}
+
+export function getMappedRoleLevel(member, settings) {
+  return Math.max(0, ...getMappedRoles(member, settings).map(role => role.level));
+}
+
 export async function syncUserRoles(member, level, settings) {
   if (!member?.roles) return;
   settings ||= await getGuildConfig(member.guild.id);
+  // Không gỡ vai trò bậc cao đang có vì một lần đọc XP cũ/chưa đồng bộ.
+  level = Math.max(level, getMappedRoleLevel(member, settings));
   const earned = settings.roleRewards.filter(item => item.level <= level).sort((a, b) => b.level - a.level);
   const targets = settings.levelMode === 'role_mapping' ? earned.slice(0, 1) : earned;
   try {

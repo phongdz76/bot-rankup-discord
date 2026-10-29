@@ -17,6 +17,12 @@ const guildConfigSchema = new mongoose.Schema({
     roleId: { type: String, required: true },
     roleName: { type: String, maxlength: 100 },
   }],
+  // Vai trò có sẵn chỉ dùng để đối chiếu cấp, không tự động trao/gỡ.
+  roleBaselines: [{
+    _id: false,
+    level: { type: Number, required: true, min: 0, max: 100000 },
+    roleId: { type: String, required: true },
+  }],
   welcome: { type: messageSchema, required: true },
   goodbye: { type: messageSchema, required: true },
   xpSettings: {
