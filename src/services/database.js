@@ -23,7 +23,7 @@ export async function connectDatabase() {
       console.warn('[MongoDB] [WARN] Mat ket noi toi MongoDB, dang thu ket noi lai...');
     });
 
-    await mongoose.connect(config.mongoUri);
+    await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 });
     return true;
   } catch (error) {
     console.error('[MongoDB] Khởi tạo kết nối thất bại:', error.message);

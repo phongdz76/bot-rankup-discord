@@ -1,0 +1,65 @@
+<%- include('partials/header') %>
+<main id="main" class="container page-content" data-settings-guild="<%= guild.id %>">
+  <a class="back-link" href="/servers">← Máy chủ của tôi</a><p class="eyebrow">Cài đặt máy chủ</p><h1><%= guild.name %></h1>
+  <p class="lead">Chọn tính năng bạn muốn dùng, điều chỉnh theo ý thích rồi bấm <strong>Lưu thay đổi</strong>.</p>
+  <p id="load-status" role="status">Đang tải cấu hình server…</p>
+  <div class="dashboard-layout" id="settings-ui" hidden>
+    <aside class="sidebar" aria-label="Các mục cấu hình" role="tablist" aria-orientation="vertical">
+      <button type="button" id="tab-welcome" role="tab" aria-controls="panel-welcome" aria-selected="true" data-tab="welcome">✿ Chào đón & Tạm biệt</button>
+      <button type="button" id="tab-level" role="tab" aria-controls="panel-level" aria-selected="false" tabindex="-1" data-tab="level">✧ Cấp độ & Điểm</button>
+      <button type="button" id="tab-roles" role="tab" aria-controls="panel-roles" aria-selected="false" tabindex="-1" data-tab="roles">◇ Phần thưởng vai trò</button>
+      <button type="button" id="tab-channels" role="tab" aria-controls="panel-channels" aria-selected="false" tabindex="-1" data-tab="channels"># Kênh thông báo</button>
+      <button type="button" id="tab-leaderboard" role="tab" aria-controls="panel-leaderboard" aria-selected="false" tabindex="-1" data-tab="leaderboard">↗ Bảng xếp hạng</button>
+      <button type="button" id="tab-advanced" role="tab" aria-controls="panel-advanced" aria-selected="false" tabindex="-1" data-tab="advanced">⌘ Tùy chọn khác</button>
+      <a href="/docs">Hướng dẫn sử dụng ↗</a>
+    </aside>
+    <form id="settings-form" novalidate>
+      <div class="save-bar"><span id="save-status" role="status">Cài đặt đã được tải</span><button class="button primary" id="save-settings" type="submit">Lưu thay đổi →</button></div>
+      <section class="panel tab-panel" id="panel-welcome" role="tabpanel" aria-labelledby="tab-welcome">
+        <p class="eyebrow">LỜI CHÀO ĐẦU TIÊN</p><h2>Chào đón & Tạm biệt</h2><p class="muted">Một lời chào nhỏ cũng khiến người mới cảm thấy thuộc về.</p>
+        <% for (const [key, name] of [['welcome', 'Chào mừng thành viên mới'], ['goodbye', 'Tạm biệt thành viên rời máy chủ']]) { %>
+          <div class="message-settings"><label class="toggle-row"><span><%= name %></span><input type="checkbox" name="<%= key %>.enabled" class="switch"></label>
+          <label>Kênh gửi tin<select name="<%= key %>.channelId" data-channel="text"><option value="">Chọn kênh văn bản</option></select></label>
+          <label>Nội dung tin nhắn<textarea name="<%= key %>.message" rows="4" maxlength="1800" required></textarea></label>
+          <div class="token-tools" aria-label="Chèn thông tin tự động vào tin nhắn"><span>Chèn nhanh:</span>
+            <% for (const [token, label] of [['user', 'Gắn thẻ thành viên'], ['username', 'Tên thành viên'], ['server', 'Tên máy chủ'], ['memberCount', 'Số thành viên']]) { %>
+              <button type="button" class="token-button" data-insert-token="<%= token %>" data-message-target="<%= key %>.message"><%= label %></button>
+            <% } %>
+          </div>
+          <p class="field-help">Bấm vào thông tin bạn muốn chèn. Bot sẽ tự điền đúng tên và số thành viên khi gửi tin nhắn.</p>
+          <label class="checkbox-row"><input type="checkbox" name="<%= key %>.useEmbed"> Gửi trong khung nổi bật</label>
+          <div class="message-preview" data-message-preview="<%= key %>" aria-label="Xem trước tin nhắn <%= key === 'welcome' ? 'chào mừng' : 'tạm biệt' %>">
+            <div class="message-preview-heading"><span>Xem trước tin nhắn</span><span data-preview-format="<%= key %>">Khung nổi bật</span></div>
+            <div class="message-preview-row">
+              <img src="/assets/favicon.svg" alt="" width="40" height="40">
+              <div class="message-preview-content"><div class="preview-author"><strong>Hutao-Chan</strong><span>Ứng dụng</span></div><p data-preview="<%= key %>"></p></div>
+            </div>
+          </div></div>
+        <% } %>
+      </section>
+      <section class="panel tab-panel" id="panel-level" role="tabpanel" aria-labelledby="tab-level" hidden>
+        <p class="eyebrow">Cùng nhau tiến xa hơn</p><h2>Cấp độ & Điểm kinh nghiệm</h2>
+        <p class="muted">Điểm kinh nghiệm (XP) giúp thành viên lên cấp khi trò chuyện và tham gia phòng thoại.</p>
+        <label>Cách giữ phần thưởng<select name="levelMode"><option value="unlimited">Giữ tất cả vai trò đã đạt</option><option value="role_mapping">Chỉ giữ vai trò thưởng cao nhất</option></select></label><p class="field-help">Nếu chỉ giữ vai trò cao nhất, hãy thêm ít nhất một phần thưởng ở mục Phần thưởng vai trò. Cấp độ vẫn tăng sau mốc thưởng cuối cùng.</p>
+        <h3>Điểm từ tin nhắn</h3><div class="fields-grid"><label>Điểm ít nhất mỗi lần<input name="xpSettings.chat.min" type="number" min="0" max="10000" required></label><label>Điểm nhiều nhất mỗi lần<input name="xpSettings.chat.max" type="number" min="0" max="10000" required></label><label>Thời gian chờ giữa hai lần nhận điểm (giây)<input name="xpSettings.chat.cooldownSeconds" type="number" min="1" max="86400" required></label></div>
+        <h3>Điểm từ phòng thoại</h3><div class="fields-grid"><label>Điểm mỗi phút<input name="xpSettings.voice.rewardPerMinute" type="number" min="0" max="10000" required></label><label>Số người cùng tham gia tối thiểu<input name="xpSettings.voice.minChannelMembers" type="number" min="2" max="100" required></label></div><p class="field-help">Chỉ tính người không tắt mic, không tắt tai nghe và không bị máy chủ tắt tiếng. Bot và người ở kênh chờ vắng mặt không được tính.</p>
+      </section>
+      <section class="panel tab-panel" id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" hidden>
+        <p class="eyebrow">Mỗi cột mốc, một danh hiệu</p><h2>Phần thưởng vai trò</h2><p class="muted">Chọn cấp độ cần đạt và vai trò sẽ trao. Ví dụ: đạt cấp 5 để nhận vai trò Thành viên tích cực.</p><p class="field-help">Tạo vai trò trước trong Discord → Cài đặt máy chủ → Vai trò. Kéo vai trò của Hutao-Chan lên trên các vai trò muốn trao thưởng.</p><div id="role-rewards"></div><button type="button" id="add-role" class="button secondary">+ Thêm phần thưởng</button><p class="field-help">Vai trò được cập nhật khi thành viên nhận điểm lần tiếp theo. Xóa phần thưởng ở đây không gỡ vai trò đã trao.</p>
+      </section>
+      <section class="panel tab-panel" id="panel-channels" role="tabpanel" aria-labelledby="tab-channels" hidden>
+        <p class="eyebrow">Những tin vui của máy chủ</p><h2>Kênh thông báo</h2><label>Gửi lời chúc mừng lên cấp tại<select name="levelUpChannelId" data-channel="text"><option value="">Kênh trò chuyện mà thành viên vừa nhắn</option></select></label><p class="field-help">Chọn một kênh riêng nếu bạn muốn thông báo cả những lần lên cấp nhờ phòng thoại. Kênh chào mừng và tạm biệt được chọn ở mục Chào đón & Tạm biệt.</p>
+      </section>
+      <section class="panel tab-panel" id="panel-leaderboard" role="tabpanel" aria-labelledby="tab-leaderboard" hidden>
+        <div class="section-toolbar"><div><p class="eyebrow">Những người giữ nhịp cộng đồng</p><h2>Bảng xếp hạng</h2></div><button type="button" class="button secondary" id="refresh-leaderboard">Làm mới ↻</button></div>
+        <div id="leaderboard" aria-live="polite"></div>
+      </section>
+      <section class="panel tab-panel" id="panel-advanced" role="tabpanel" aria-labelledby="tab-advanced" hidden>
+        <p class="eyebrow">Thiết lập theo cách của bạn</p><h2>Tùy chọn khác</h2><h3>Kênh không tính điểm</h3><p class="field-help">Đánh dấu các kênh bạn muốn bỏ qua, chẳng hạn kênh dùng lệnh bot.</p><select multiple name="excludedChannels" data-channel="all" hidden></select><div class="choice-list" data-choice-list="excludedChannels" role="group" aria-label="Kênh không tính điểm"></div><h3>Vai trò không tính điểm</h3><p class="field-help">Thành viên có một trong những vai trò được chọn sẽ không nhận điểm.</p><select multiple name="excludedRoles" hidden></select><div class="choice-list" data-choice-list="excludedRoles" role="group" aria-label="Vai trò không tính điểm"></div>
+        <div class="danger-zone"><h3>Khôi phục cài đặt ban đầu</h3><p>Các cài đặt sẽ trở về mặc định. Điểm, cấp độ và vai trò đã trao cho thành viên vẫn được giữ.</p><button type="button" id="reset-settings" class="button danger">Đặt lại cài đặt</button></div>
+      </section>
+      <div class="form-bottom-actions"><button class="button primary" type="submit">Lưu thay đổi →</button></div>
+    </form>
+  </div>
+</main>
+<%- include('partials/footer') %>

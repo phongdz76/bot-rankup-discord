@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Hutao-Chan — bot cấp độ, role thưởng và chào mừng dành cho cộng đồng Discord của bạn.">
+  <meta name="csrf-token" content="<%= csrf %>">
+  <title><%= title %> · Hutao-Chan</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="preload" href="/assets/fonts/be-vietnam-pro-vietnamese-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/be-vietnam-pro-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/css/fonts.css?v=3">
+  <link rel="stylesheet" href="/assets/css/style.css?v=10">
+  <% if (typeof pageStyle !== 'undefined' && pageStyle === 'guide') { %><link rel="stylesheet" href="/assets/css/guide.css?v=1"><% } %>
+  <script src="/assets/js/app.js?v=4" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Đến nội dung chính</a>
+  <header class="topbar">
+    <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">✿</span><span>Hutao<span class="muted">-Chan</span><small>VÃNG SINH ĐƯỜNG</small></span></a>
+    <nav aria-label="Điều hướng chính" class="<%= user ? 'nav-signed-in' : 'nav-guest' %>">
+      <a href="/docs" class="header-action">Hướng dẫn</a>
+      <% if (user) { %>
+        <a href="/servers" class="header-action">Máy chủ của tôi</a>
+        <form action="/auth/logout" method="post" class="inline"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="header-action" type="submit">Đăng xuất</button></form>
+      <% } else { %>
+        <a href="/auth/discord" class="header-action">Đăng nhập Discord <span aria-hidden="true">↗</span></a>
+      <% } %>
+    </nav>
+  </header>

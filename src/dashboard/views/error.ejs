@@ -1,0 +1,13 @@
+<%- include('partials/header') %>
+<main id="main" class="container page-content"<% if (typeof supportCode !== 'undefined') { %> data-support-code="<%= supportCode %>"<% } %>>
+  <div class="panel empty-state">
+    <p class="eyebrow">Hutao-Chan</p>
+    <h1><%= title %></h1>
+    <p><%= message %></p>
+    <div class="actions centered-actions">
+      <a class="button secondary" href="/">Về trang chủ</a>
+      <% if (dashboardEnabled) { %><a class="button primary" href="/auth/discord">Đăng nhập lại ↗</a><% } else { %><a class="button primary" href="/docs#faq">Xem hướng dẫn trợ giúp ↗</a><% } %>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

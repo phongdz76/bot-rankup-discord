@@ -1,128 +1,162 @@
-# Bot Discord "Hutao-Chan" - He Thong Rankup & Cap Do Tu Dong
+# Hutao-Chan v2 — Bot cấp độ & dashboard Discord
 
-He thong tinh diem kinh nghiem (Chat & Voice) va tu dong quan ly, phan cap vai tro cho server Discord **Hoi Tho Gai Anime**, ket noi co so du lieu MongoDB Atlas va ho tro van hanh 24/7 mien phi.
+Bot Discord đa server, viết bằng Node.js ES Modules, discord.js v14 và MongoDB Atlas. Dashboard Express/EJS dùng tiếng Việt, giao diện tối với màu đỏ/cam theo chủ đề Hu Tao.
 
----
+## Tính năng
 
-## 1. Tinh Nang Chinh
+- Chat thưởng ngẫu nhiên **10–15 XP**, cooldown mặc định **30 giây** cho mỗi thành viên trong từng server.
+- Voice thưởng **2 XP/phút hợp lệ**, tối thiểu 2 người hợp lệ; bỏ qua bot, kênh AFK, người tắt/bị tắt mic hoặc tai nghe, người bị loại trừ và người không được nói trên sân khấu.
+- Hai chế độ: **Role Mapping** giữ role thưởng cao nhất; **Unlimited** tích lũy role đã đạt. Cả hai đều tiếp tục tăng level sau mốc cuối.
+- Welcome/goodbye tùy chỉnh kênh, nội dung, embed hoặc văn bản; biến `{user}`, `{username}`, `{server}`, `{memberCount}`.
+- `/rank [user]` trả ảnh PNG, `/leaderboard` trả top 10, `/help` hướng dẫn và `/setup` quản trị.
+- Dashboard: đăng nhập Discord, chọn server có quyền quản lý, cấu hình XP/role/kênh/loại trừ, xem trước lời chào và leaderboard.
+- Mỗi server có dữ liệu XP và cấu hình riêng. Cấu hình từ dashboard và `/setup` dùng chung một lớp kiểm tra.
+- Session lưu MongoDB, mã hóa dữ liệu session, OAuth state, cookie HttpOnly/SameSite, CSRF, giới hạn tần suất và kiểm tra lại quyền quản lý khi truy cập server.
 
-* **Chat XP (Tin nhan van ban):**
-  * Nhan ngau nhien tu 10 den 15 XP moi tin nhan hop le.
-  * Cooldown chong spam: 60 giay moi lan nhan diem cho moi thanh vien.
-* **Voice XP (Phong thoai thoi gian thuc):**
-  * Tu dong quet tat ca phong voice moi 60 giay mot lan.
-  * Co che chong AFK: Phong thoai phai co toi thieu tu 2 thanh vien tro len (khong tinh bot), thanh vien khong tat mic (`selfMute === false`) va khong tat tai nghe (`selfDeaf === false`).
-  * Cong 2 XP moi phut thoai hop le va tu dong tich luy tong thoi gian voice.
-* **Tu dong thang cap & hoan doi vai tro (Auto Role):**
-  * Thuoc toan tinh level chuan RPG: `XP can = 50 * (Level^2) + (200 * Level) + 300`.
-  * Khi dat du XP len bac moi, bot tu dong gan role moi va thu hoi cac role bac duoi de danh sach vai tro luon gon gang:
-    * **Level 0:** `Day xa hoi`
-    * **Level 5:** `Nguoi do thai` (~5,000 XP)
-    * **Level 15:** `Nigger Boy` (~32,000 XP)
-    * **Level 30:** `Nguoi nha nuoc` (~110,000 XP)
-* **Slash Commands:**
-  * `/rank [user]`: Xem ho so ca nhan, cap do, thanh tien trinh XP, so tin nhan da gui va tong thoi gian voice.
-  * `/leaderboard`: Xem bang vinh danh Top 10 thanh vien nang no nhat server.
-* **Express Web Server Keep-Alive:**
-  * Mo endpoint `/` va `/health` bao cao trang thai hoat dong, thoi gian uptime va luong RAM su dung, ho tro cac dich vu uptime ping giu bot chay 24/7.
+XP cần để lên cấp tiếp theo: `50 × level² + 200 × level + 300`.
+Tổng XP đạt level 5 / 15 / 30: **5.000 / 76.250 / 523.750**.
 
----
+## Chạy local
 
-## 2. Yeu Cau He Thong
+Yêu cầu **Node.js 22.12+ còn được hỗ trợ**, khuyến nghị **24 LTS**, MongoDB Atlas và một ứng dụng Discord có bot.
 
-* Node.js v18.0.0 tro len.
-* Tai khoan Discord Developer Portal da tao Bot va bat ca 3 Privileged Gateway Intents:
-  * Presence Intent
-  * Server Members Intent
-  * Message Content Intent
-* Cluster MongoDB Atlas Cloud (Goi M0 mien phi).
-
----
-
-## 3. Huong Dan Cai Dat & Chay Local
-
-### Buoc 1: Cai dat thu vien
-```bash
-npm install
+```powershell
+npm ci
+Copy-Item .env.example .env
 ```
 
-### Buoc 2: Thiet lap file bien moi truong (.env)
-Tao file `.env` o thu muc goc (tham khao `.env.example`):
-```env
-# Discord Bot
-DISCORD_TOKEN=your_bot_token_here
-DISCORD_CLIENT_ID=your_client_id_here
-GUILD_ID=your_guild_id_here
+Nếu đã có `.env`, giữ file đó và bổ sung những biến mới, tránh ghi đè token/URI đang dùng.
 
-# MongoDB Atlas
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/hutao_rankup?retryWrites=true&w=majority
+Thiết lập:
 
-# Port Web Server
-PORT=3000
+| Biến | Mục đích |
+| --- | --- |
+| `DISCORD_TOKEN` | Bot token từ mục Bot |
+| `DISCORD_CLIENT_ID` | Application ID của cùng ứng dụng Discord |
+| `MONGODB_URI` | URI MongoDB Atlas; URL-encode ký tự đặc biệt trong mật khẩu |
+| `PORT` | Cổng web, mặc định 3000 |
+| `DASHBOARD_URL` | URL gốc web, ví dụ `http://localhost:3050` |
+| `DISCORD_CLIENT_SECRET` | Client Secret tại OAuth2 trong Developer Portal |
+| `OAUTH2_CALLBACK_URL` | Ví dụ `http://localhost:3050/auth/discord/callback` |
+| `SESSION_SECRET` | Khóa ngẫu nhiên ít nhất 32 ký tự |
+| `NODE_ENV` | `development` local, `production` khi deploy HTTPS |
 
-# Role IDs (4 bac thang tien)
-ROLE_LVL0_ID=role_id_day_xa_hoi
-ROLE_LVL5_ID=role_id_nguoi_do_thai
-ROLE_LVL15_ID=role_id_nigger_boy
-ROLE_LVL30_ID=role_id_nguoi_nha_nuoc
+Tạo khóa phiên rồi điền vào `.env`:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-### Buoc 3: Khoi dong bot
-* Che do phat trien (tu dong restart khi sua code bang nodemon):
-  ```bash
-  npm run dev
-  ```
-* Che do chay chinh thuc:
-  ```bash
-  npm start
-  ```
+Trong [Discord Developer Portal](https://discord.com/developers/applications):
 
----
+1. Chọn đúng ứng dụng bot → **OAuth2** → **Client Secret / Reset Secret**. Điền giá trị vào `DISCORD_CLIENT_SECRET` trong `.env`.
+2. Trong **Redirects**, thêm chính xác URL `OAUTH2_CALLBACK_URL`, bao gồm cổng và đường dẫn, rồi Save Changes.
+3. Trong **Bot → Privileged Gateway Intents**, bật **Server Members Intent** và **Message Content Intent**. Không cần Presence Intent.
+4. Mời bot bằng liên kết trên trang chủ. Bot cần Xem kênh, Gửi tin, Nhúng liên kết, Đính kèm tệp và Quản lý vai trò.
+5. Đặt role bot cao hơn mọi role thưởng.
 
-## 4. Huong Dan Trien Khai Hosting 24/7 Mien Phi (Render + UptimeRobot)
+Chạy:
 
-Mo hinh giup bot hoat dong lien tuc 24/24 hoan toan mien phi va khong can the tin dung:
+```powershell
+npm run dev
+# hoặc
+npm start
+```
 
-### Buoc 1: Tao Web Service tren Render.com
-1. Dang nhap [Render.com](https://render.com) bang tai khoan GitHub cua ban.
-2. Nhan **New +** -> chon **Web Service**.
-3. Chon repository `bot-rankup-discord`.
-4. Cau hinh thong so co ban:
-   * **Name:** `hutao-rankup-bot`
-   * **Region:** `Singapore` (toi uu do tre thap nhat ve Discord va Viet Nam)
-   * **Branch:** `main`
-   * **Runtime:** `Node`
-   * **Build Command:** `npm install`
-   * **Start Command:** `npm start`
-   * **Instance Type:** `Free` (0$/thang)
+Mở URL tương ứng với `PORT`. `npm run dev` theo dõi cả `.env`; `npm start` cần khởi động lại sau khi sửa biến môi trường.
 
-### Buoc 2: Cau hinh bien moi truong tren Render
-Vao muc **Environment Variables** tren Render va them day du cac bien tu file `.env`:
-* `DISCORD_TOKEN`
-* `DISCORD_CLIENT_ID`
-* `GUILD_ID`
-* `MONGODB_URI`
-* `PORT` (Render tu cap hoac de 3000)
-* `ROLE_LVL0_ID`
-* `ROLE_LVL5_ID`
-* `ROLE_LVL15_ID`
-* `ROLE_LVL30_ID`
-Sau do nhan **Save Changes** de Render tien hanh build va khoi dong bot.
+Dashboard chỉ bật khi đủ Client ID, MongoDB URI, Client Secret và Session Secret hợp lệ về cấu hình. Nếu thiếu, bot và các trang công khai vẫn hoạt động khi MongoDB đã kết nối; trang đăng nhập nêu biến cần bổ sung. Nếu MongoDB không kết nối lúc khởi động, bot không đăng nhập để tránh mất dữ liệu.
 
-### Buoc 3: Thiet lap UptimeRobot giu Bot online 24/7 (Chong sleep)
-1. Sau khi Render deploy thanh cong, ban nhan duoc link web (vi du: `https://hutao-rankup-bot.onrender.com`).
-2. Dang nhap vao [UptimeRobot.com](https://uptimerobot.com) (mien phi).
-3. Bấm **Add New Monitor**:
-   * **Monitor Type:** `HTTP(s)`
-   * **Friendly Name:** `Hutao Bot Monitor`
-   * **URL (or IP):** `https://hutao-rankup-bot.onrender.com/health`
-   * **Monitoring Interval:** `5 minutes` (ping moi 5 phut)
-4. Bấm **Create Monitor**. UptimeRobot se tu dong gui request dinh ky, giup Render luon tinh tao hoat dong 24/7.
+## Dùng trong Discord
 
----
+```text
+/rank
+/rank user:@thanhvien
+/leaderboard
+/help
 
-## 5. Luu Y Quan Trong Ve Phan Quyen Discord
+/setup welcome enabled:True channel:#chao-mung message:Chào {user}!
+/setup welcome enabled:False
+/setup goodbye enabled:True channel:#tam-biet embed:True
+/setup addrole level:0 role:@TânBinh
+/setup addrole level:5 role:@ThànhViên
+/setup levelmode mode:role_mapping
+/setup levelmode mode:unlimited
+/setup removerole level:5
+/setup listroles
+/setup xp chat min:10 max:15 cooldown:30
+/setup xp voice reward:2 members:2
+/setup channel channel:#len-cap
+/setup view
+/setup reset confirm:True
+/setup dashboard
+```
 
-Trong **Cai dat may chu -> Vai tro (Roles)** tren Discord:
-* Vai tro cua bot (`Hutao-Chan` hoac `Bot`) bat buoc phai nam **TREN** vai tro `Nguoi nha nuoc`.
-* Neu role cua Bot nam duoi, Discord se tu dong chan quyen va bot khong the gan vai tro cho thanh vien khi ho thang cap.
+`/setup` cần quyền **Quản lý Server**. `/rank`, `/leaderboard` và `/setup` chỉ dùng trong server; `/help` dùng được trong DM. Lệnh global đăng ký khi bot kết nối, có thể cần tải lại Discord để thấy thay đổi.
+
+Có thể đồng bộ lệnh mà không mở thêm kết nối bot bằng `npm run register`. `/help` dùng liên kết slash command bấm được khi lấy được command ID từ Discord. Trong Developer Portal → Installation, Guild Install cần scopes `bot` + `applications.commands`; User Install chỉ cần `applications.commands`.
+
+Mục **Lệnh / Try My Commands** trên hồ sơ là giao diện của Discord. API công khai không có tùy chọn cấu hình riêng mục này; đăng ký global commands không bảo đảm các nút xuất hiện ngay. Có thể dùng `/help` hoặc gõ `/` trong server để mở các lệnh đã đăng ký.
+
+Role Mapping yêu cầu ít nhất một mốc. Muốn xóa mốc cuối, chuyển sang Unlimited trước. Mốc role được tự sắp theo level; role tích hợp, @everyone hoặc role nằm trên bot không dùng làm thưởng.
+
+Role được đồng bộ ở lần nhận XP tiếp theo; thành viên mới nhận mốc 0 khi tham gia. Xóa mốc/reset không tự thu hồi role đã cấp. Reset không xóa XP.
+
+Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính đủ phút ở trạng thái hợp lệ, không cộng bù thời gian bot tắt. Các kênh con/thread được loại trừ theo kênh hoặc danh mục cha.
+
+## Dashboard và API
+
+- `/`: giới thiệu; `/docs`: hướng dẫn tiếng Việt công khai.
+- `/auth/discord`: đăng nhập; `/auth/discord/callback`: nhận callback.
+- `POST /auth/logout`: đăng xuất, yêu cầu CSRF.
+- `/servers`: danh sách server có quyền quản lý; `/servers/:id`: cấu hình.
+- `GET /api/guilds/:id/settings`: cấu hình và danh sách kênh/role.
+- `POST /api/guilds/:id/settings`: body `{ settings, revision }`, header `x-csrf-token`.
+- `POST /api/guilds/:id/reset`: body `{ confirm: true, revision }`, yêu cầu CSRF.
+- `GET /api/guilds/:id/leaderboard`: top 10, yêu cầu quyền quản lý.
+- `GET /health`: HTTP 200 khi MongoDB và Discord đã kết nối, 503 nếu một trong hai chưa sẵn sàng.
+
+Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
+
+Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã chẩn đoán; `logs/oauth.log` chỉ ghi thời điểm và mã lỗi, không ghi code/token/state/secret.
+
+Cấu hình có trường `revision`: khi hai cửa sổ cập nhật cùng lúc, yêu cầu dùng phiên bản cũ nhận HTTP 409. Tải lại trước khi chỉnh tiếp.
+
+## Nâng cấp từ v1
+
+- Giữ nguyên collection `users`; không xóa XP hoặc chạy reset dữ liệu.
+- Giữ `GUILD_ID`, `ROLE_LVL0_ID`, `ROLE_LVL5_ID`, `ROLE_LVL15_ID`, `ROLE_LVL30_ID` và `LEVEL_UP_CHANNEL_ID` của server gốc. `GUILD_ID` chỉ xác định server nhập mặc định, không giới hạn bot vào server đó.
+- Nếu server chưa có GuildConfig, bot dùng mặc định. Server gốc nhập các role ID từ env; server mới dùng Unlimited, không có role thưởng hoặc kênh thông báo mặc định. Cooldown mặc định là **30 giây**.
+- Hồ sơ đã tồn tại giữ XP. Hồ sơ mới trong server gốc được khởi tạo từ các role ID đã cấu hình; không dò role theo tên hoặc ID hardcode trên mọi server.
+- Khi đã lưu GuildConfig, sửa trên dashboard hoặc `/setup`; thay đổi env không ghi đè cấu hình đã lưu.
+- Dùng `passport-oauth2` để tích hợp Discord trực tiếp, cùng OAuth state; không phụ thuộc `passport-discord`.
+
+## Kiểm tra
+
+```powershell
+npm run check
+npm test
+```
+
+Test dùng MongoDB tạm bằng `mongodb-memory-server`, không kết nối Atlas thật và không đăng nhập bot thật. Lần đầu có thể tải MongoDB binary.
+
+Test trình duyệt dùng Chrome/Edge đã cài trên Windows. Trên máy khác đặt `BROWSER_EXECUTABLE` đến Chromium tương thích; nếu không có trình duyệt, bài kiểm tra này được đánh dấu skip. CI chạy kiểm tra cú pháp và các bài test MongoDB/HTTP.
+
+Bao gồm: ngưỡng XP, cooldown 30 giây, đa server, cập nhật chat/voice đồng thời, role mapping/stacking, loại trừ, welcome, rank card PNG, quyền dashboard, CSRF, xung đột phiên bản và giao diện desktop/mobile.
+
+## Triển khai
+
+Có sẵn `render.yaml` cho một Node Web Service: bot + dashboard dùng chung tiến trình, build `npm ci --omit=dev`, start `npm start`.
+
+1. Đưa code lên repository và tạo service/Blueprint trên Render.
+2. Điền secrets trong Environment, đặt `NODE_ENV=production`.
+3. Đặt `DASHBOARD_URL=https://ten-service.onrender.com` và `OAUTH2_CALLBACK_URL=https://ten-service.onrender.com/auth/discord/callback`.
+4. Thêm callback HTTPS đó vào Developer Portal. Khóa session được Blueprint tạo tự động.
+5. Cho phép IP dịch vụ truy cập Atlas. Nếu nâng cấp v1, thêm các biến guild/role cũ khi cần.
+6. Kiểm tra `/health`, đăng nhập OAuth thực tế, gửi chat, voice và thử thành viên tham gia/rời server.
+
+Blueprint dùng gói Free để thử nghiệm. **Không cam kết online 24/7**: Render Free có sleep, quota và giới hạn khác. Dùng gói luôn chạy hoặc máy chủ riêng nếu cần ổn định. Dịch vụ ping chỉ dùng theo dõi, không phải bảo đảm khả dụng. Xem [giới hạn chính thức của Render](https://render.com/docs/free).
+
+Chỉ chạy **một tiến trình bot cho mỗi token**, tránh hai tiến trình cùng thưởng voice. Trên Render tránh để bản local chạy cùng lúc với bản deploy. Reverse proxy hiện được cấu hình một lớp; điều chỉnh `trust proxy` nếu hạ tầng khác.
+
+Việc triển khai lên tài khoản hosting và OAuth với tài khoản thật cần được kiểm tra tại môi trường vận hành; test tự động dùng dữ liệu thử nghiệm.

@@ -1,119 +1,76 @@
 import { ChannelType } from 'discord.js';
-import { config } from '../config/index.js';
-import { User } from '../models/User.js';
-import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from './level.js';
+import { getGuildConfig } from '../services/guildConfig.js';
+import { awardXp, isExcluded } from '../services/xp.js';
 
-let voiceInterval = null;
+let voiceInterval;
+let running = false;
+const eligibleSince = new Map();
+const voiceTypes = [ChannelType.GuildVoice, ChannelType.GuildStageVoice];
 
-/**
- * Khởi động vòng lặp kiểm tra kênh thoại định kỳ 60 giây
- * @param {import('discord.js').Client} client
- */
-export function startVoiceXpTracker(client) {
-  if (voiceInterval) {
-    clearInterval(voiceInterval);
-  }
-
-  console.log('[VoiceXP] [INFO] Khoi dong bo theo doi Voice XP (quet 60s/lan).');
-
-  voiceInterval = setInterval(async () => {
-    try {
-      await processAllVoiceChannels(client);
-    } catch (error) {
-      console.error('[VoiceXP] [ERROR] Loi khi quet phong voice:', error.message);
-    }
-  }, config.xp.voice.checkIntervalMs);
+export function eligibleVoiceMembers(channel, settings) {
+  if (!voiceTypes.includes(channel.type) || channel.id === channel.guild.afkChannelId ||
+      settings.excludedChannels.includes(channel.id)) return [];
+  const eligible = [...channel.members.values()].filter(member =>
+    !member.user.bot && !isExcluded(member, channel.id, settings) &&
+    !member.voice.selfMute && !member.voice.selfDeaf &&
+    !member.voice.serverMute && !member.voice.serverDeaf && !member.voice.suppress);
+  return eligible.length >= settings.xpSettings.voice.minChannelMembers ? eligible : [];
 }
 
-/**
- * Dừng theo dõi voice (khi bot shutdown)
- */
-export function stopVoiceXpTracker() {
-  if (voiceInterval) {
-    clearInterval(voiceInterval);
-    voiceInterval = null;
-    console.log('[VoiceXP] [INFO] Da dung bo theo doi Voice XP.');
+function refreshChannel(channel, settings, now) {
+  const eligible = new Set(eligibleVoiceMembers(channel, settings).map(member => member.id));
+  for (const member of channel.members.values()) {
+    const key = `${channel.guild.id}:${member.id}`;
+    if (!eligible.has(member.id)) eligibleSince.delete(key);
+    else if (eligibleSince.get(key)?.channelId !== channel.id) eligibleSince.set(key, { channelId: channel.id, since: now });
   }
 }
 
-/**
- * Quét toàn bộ kênh thoại trong server hợp lệ
- * @param {import('discord.js').Client} client
- */
-async function processAllVoiceChannels(client) {
-  // Lấy danh sách server mà bot đang tham gia
-  const guilds = client.guilds.cache.filter(
-    (g) => !config.guildId || g.id === config.guildId
-  );
+export async function handleVoiceStateUpdate(oldState, newState) {
+  const settings = await getGuildConfig(newState.guild.id);
+  // Mọi thay đổi channel/mute đều bắt đầu lại phút hợp lệ của người thay đổi.
+  eligibleSince.delete(`${newState.guild.id}:${newState.id}`);
+  for (const channel of new Set([oldState.channel, newState.channel].filter(Boolean))) {
+    refreshChannel(channel, settings, Date.now());
+  }
+}
 
-  for (const [, guild] of guilds) {
-    // Lấy các kênh voice có thành viên
-    const voiceChannels = guild.channels.cache.filter(
-      (ch) =>
-        (ch.type === ChannelType.GuildVoice || ch.type === ChannelType.GuildStageVoice) &&
-        ch.members.size > 0
-    );
-
-    for (const [, channel] of voiceChannels) {
-      // Lọc các thành viên không phải là bot
-      const activeMembers = channel.members.filter((m) => !m.user.bot);
-
-      // Chống AFK: Phải có ít nhất 2 người không phải bot trong phòng
-      if (activeMembers.size < config.xp.voice.minChannelMembers) {
-        continue;
-      }
-
-      for (const [, member] of activeMembers) {
-        const voiceState = member.voice;
-
-        // Bỏ qua nếu thành viên tự tắt mic hoặc tắt tai nghe
-        if (
-          voiceState.selfMute ||
-          voiceState.serverMute ||
-          voiceState.selfDeaf ||
-          voiceState.serverDeaf
-        ) {
-          continue;
+export async function processAllVoiceChannels(client, now = Date.now()) {
+  const seen = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    const settings = await getGuildConfig(guild.id);
+    for (const channel of guild.channels.cache.values()) {
+      if (!voiceTypes.includes(channel.type)) continue;
+      refreshChannel(channel, settings, now);
+      for (const member of eligibleVoiceMembers(channel, settings)) {
+        const key = `${guild.id}:${member.id}`;
+        seen.add(key);
+        const checkpoint = eligibleSince.get(key);
+        if (checkpoint && now - checkpoint.since >= 60000) {
+          await awardXp(member, settings, { source: 'voice', xp: settings.xpSettings.voice.rewardPerMinute });
+          checkpoint.since = now;
         }
-
-        await awardVoiceXp(guild.id, member);
       }
     }
   }
+  for (const key of eligibleSince.keys()) if (!seen.has(key)) eligibleSince.delete(key);
 }
 
-/**
- * Cộng điểm Voice XP và số phút hoạt động cho thành viên hợp lệ
- * @param {string} guildId
- * @param {import('discord.js').GuildMember} member
- */
-async function awardVoiceXp(guildId, member) {
-  const userId = member.id;
-  const rewardXp = config.xp.voice.rewardPerMinute;
+export function startVoiceXpTracker(client) {
+  stopVoiceXpTracker();
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try { await processAllVoiceChannels(client); }
+    catch (error) { console.error('[VoiceXP]', error.message); }
+    finally { running = false; }
+  };
+  void tick();
+  voiceInterval = setInterval(tick, 60000);
+}
 
-  try {
-    let userDoc = await User.findOne({ userId, guildId });
-    if (!userDoc) {
-      userDoc = new User({ userId, guildId, xp: 0, level: 0, messageCount: 0, totalVoiceMinutes: 0 });
-    }
-
-    const previousLevel = userDoc.level || 0;
-    userDoc.xp += rewardXp;
-    userDoc.totalVoiceMinutes = (userDoc.totalVoiceMinutes || 0) + 1;
-
-    const { level: newLevel } = calculateLevelData(userDoc.xp);
-
-    if (newLevel > previousLevel) {
-      userDoc.level = newLevel;
-      await userDoc.save();
-
-      await syncUserRoles(member, newLevel);
-      await sendLevelUpNotification(member.guild, member, newLevel, 'voice');
-      console.log(`[RankUp] User ${member.user.tag} dat Level ${newLevel} tu hoat dong Voice.`);
-    } else {
-      await userDoc.save();
-    }
-  } catch (error) {
-    console.error(`[VoiceXP] [ERROR] Khong the cong XP voice cho ${member.user.tag}:`, error.message);
-  }
+export function stopVoiceXpTracker() {
+  if (voiceInterval) clearInterval(voiceInterval);
+  voiceInterval = null;
+  eligibleSince.clear();
 }

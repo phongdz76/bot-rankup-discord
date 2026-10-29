@@ -8,10 +8,12 @@ import {
 } from 'discord.js';
 import { config } from '../config/index.js';
 import { handleChatMessage } from '../core/chatXp.js';
-import { startVoiceXpTracker, stopVoiceXpTracker } from '../core/voiceXp.js';
+import { startVoiceXpTracker, handleVoiceStateUpdate } from '../core/voiceXp.js';
+import { handleMemberEvent } from '../core/welcome.js';
 import * as rankCommand from '../commands/rank.js';
 import * as leaderboardCommand from '../commands/leaderboard.js';
 import * as helpCommand from '../commands/help.js';
+import * as setupCommand from '../commands/setup.js';
 
 export const client = new Client({
   intents: [
@@ -28,31 +30,35 @@ client.commands = new Collection();
 client.commands.set(rankCommand.data.name, rankCommand);
 client.commands.set(leaderboardCommand.data.name, leaderboardCommand);
 client.commands.set(helpCommand.data.name, helpCommand);
+client.commands.set(setupCommand.data.name, setupCommand);
 
 /**
  * Đăng ký Slash Commands với Discord API
  */
-async function registerSlashCommands() {
+export async function registerSlashCommands() {
   if (!config.token || !config.clientId) {
     console.warn('[Discord] [WARN] Thieu DISCORD_TOKEN hoac DISCORD_CLIENT_ID trong .env.');
-    return;
+    return null;
   }
 
   const rest = new REST({ version: '10' }).setToken(config.token);
   const commandsBody = [
     rankCommand.data.toJSON(),
     leaderboardCommand.data.toJSON(),
-    helpCommand.data.toJSON()
+    helpCommand.data.toJSON(),
+    setupCommand.data.toJSON()
   ];
 
   try {
     console.log('[Discord] [INFO] Dang dang ky Slash Commands Global...');
-    await rest.put(Routes.applicationCommands(config.clientId), {
+    const registered = await rest.put(Routes.applicationCommands(config.clientId), {
       body: commandsBody
     });
     console.log('[Discord] [INFO] Da dang ky Slash Commands Global thanh cong.');
+    return registered;
   } catch (error) {
     console.error('[Discord] [ERROR] Dang ky Slash Commands that bai:', error.message);
+    return null;
   }
 }
 
@@ -76,6 +82,12 @@ export async function initDiscordClient() {
   client.on(Events.MessageCreate, async (message) => {
     await handleChatMessage(message);
   });
+
+  const safeEvent = handler => (...args) => Promise.resolve(handler(...args))
+    .catch(error => console.error('[Discord event]', error.message));
+  client.on(Events.GuildMemberAdd, safeEvent(member => handleMemberEvent(member, 'welcome')));
+  client.on(Events.GuildMemberRemove, safeEvent(member => handleMemberEvent(member, 'goodbye')));
+  client.on(Events.VoiceStateUpdate, safeEvent(handleVoiceStateUpdate));
 
   // Sự kiện tương tác Slash Command
   client.on(Events.InteractionCreate, async (interaction) => {

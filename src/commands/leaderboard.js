@@ -9,21 +9,15 @@ import { createLeaderboardEmbed } from '../utils/embed.js';
 export const data = new SlashCommandBuilder()
   .setName('leaderboard')
   .setDescription('Hiển thị bảng xếp hạng Top 10 thành viên năng nổ nhất server')
-  .setIntegrationTypes([
-    ApplicationIntegrationType.GuildInstall,
-    ApplicationIntegrationType.UserInstall
-  ])
-  .setContexts([
-    InteractionContextType.Guild,
-    InteractionContextType.BotDM,
-    InteractionContextType.PrivateChannel
-  ]);
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
+  .setContexts(InteractionContextType.Guild);
 
 /**
  * Thực thi lệnh /leaderboard
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  */
 export async function execute(interaction) {
+  if (!interaction.inGuild()) return interaction.reply({ content: 'Dùng lệnh này trong server.', ephemeral: true });
   await interaction.deferReply();
 
   const guildId = interaction.guild.id;

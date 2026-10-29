@@ -14,10 +14,12 @@ const userSchema = new mongoose.Schema(
     },
     xp: {
       type: Number,
+      min: 0,
       default: 0
     },
     level: {
       type: Number,
+      min: 0,
       default: 0
     },
     messageCount: {

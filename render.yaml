@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: hutao-chan
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DASHBOARD_URL
+        sync: false
+      - key: OAUTH2_CALLBACK_URL
+        sync: false

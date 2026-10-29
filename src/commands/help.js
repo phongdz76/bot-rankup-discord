@@ -1,53 +1,35 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ApplicationIntegrationType,
-  InteractionContextType
-} from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ApplicationIntegrationType, InteractionContextType, chatInputApplicationCommandMention } from 'discord.js';
 import { config } from '../config/index.js';
+import { getGuildConfig } from '../services/guildConfig.js';
 
-export const data = new SlashCommandBuilder()
-  .setName('help')
-  .setDescription('Xem hướng dẫn sử dụng và danh sách lệnh của Bot')
-  .setIntegrationTypes([
-    ApplicationIntegrationType.GuildInstall,
-    ApplicationIntegrationType.UserInstall
-  ])
-  .setContexts([
-    InteractionContextType.Guild,
-    InteractionContextType.BotDM,
-    InteractionContextType.PrivateChannel
-  ]);
+export const data = new SlashCommandBuilder().setName('help').setDescription('Hướng dẫn sử dụng Hutao-Chan')
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall)
+  .setContexts(InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel);
 
-/**
- * Thực thi lệnh /help
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
- */
 export async function execute(interaction) {
   await interaction.deferReply();
-
-  const embed = new EmbedBuilder()
-    .setColor(config.theme.color)
-    .setTitle('Hướng dẫn sử dụng')
-    .setDescription(
-      '**Cấp độ & Xếp hạng**\n' +
-      '**/rank** – Xem cấp độ và tiến trình cá nhân (hoặc gắn thẻ @bạn_bè để xem giúp).\n' +
-      '**/leaderboard** – Xem bảng vinh danh Top 10 thành viên năng nổ nhất server.\n\n' +
-      '**Cơ chế nhận điểm**\n' +
-      '• **Chat văn bản:** Nhận 10 - 15 XP mỗi tin nhắn hợp lệ (cooldown 15 giây).\n' +
-      '• **Kênh thoại (Voice):** Nhận 2 XP mỗi phút (yêu cầu phòng từ 2 người trở lên, không tắt mic/tai nghe).\n\n' +
-      '**Lộ trình thăng tiến 4 bậc**\n' +
-      '• **Level 0:** Đáy xã hội (Khởi đầu)\n' +
-      '• **Level 5:** Người do thái (~5,000 XP)\n' +
-      '• **Level 15:** Nigger Boy (~76,000 XP)\n' +
-      '• **Level 30:** Người nhà nước (~523,000 XP)\n\n' +
-      '**Kênh thông báo thăng cấp**\n' +
-      `Thông báo lên cấp từ Chat và Voice được gửi tập trung về kênh <#${config.levelUpChannelId}>.\n\n` +
-      '**Hướng dẫn**\n' +
-      '**/help** – Xem danh sách lệnh và cơ chế hoạt động.'
-    )
-    .setFooter({ text: config.theme.footerText })
-    .setTimestamp();
-
+  const manager = interaction.client?.application?.commands;
+  let commands = manager?.cache;
+  if (!commands?.size && manager) commands = await manager.fetch().catch(() => null);
+  const mention = name => {
+    const command = commands?.find(command => command.name === name && command.type === 1);
+    return command ? chatInputApplicationCommandMention(name, command.id) : `**/${name}**`;
+  };
+  const settings = interaction.guildId ? await getGuildConfig(interaction.guildId) : null;
+  const chat = settings?.xpSettings.chat;
+  const voice = settings?.xpSettings.voice;
+  const embed = new EmbedBuilder().setColor(config.theme.color).setTitle('Hutao-Chan • Hướng dẫn')
+    .setDescription([
+      `${mention('rank')} [user] — Rank card và thống kê hoạt động trong server.`,
+      `${mention('leaderboard')} — Top 10 thành viên trong server.`,
+      `${mention('setup')} — Cấu hình server (cần quyền Quản lý Server).`,
+      `${mention('help')} — Xem hướng dẫn này.`,
+      '',
+      chat ? `**Chat:** ${chat.min}–${chat.max} XP, cooldown ${chat.cooldownSeconds} giây.` : 'XP và role thưởng được cấu hình riêng cho từng server.',
+      voice ? `**Voice:** ${voice.rewardPerMinute} XP/phút; ít nhất ${voice.minChannelMembers} người hợp lệ, không tắt mic/tai nghe.` : '',
+      settings ? `**Chế độ:** ${settings.levelMode === 'role_mapping' ? 'Role Mapping (thay thế role)' : 'Unlimited (tích lũy role)'}.` : '',
+      '',
+      `[Dashboard](${config.baseUrl}/servers) • [Hướng dẫn tiếng Việt](${config.baseUrl}/docs)`,
+    ].filter(Boolean).join('\n')).setFooter({ text: config.theme.footerText });
   await interaction.editReply({ embeds: [embed] });
 }

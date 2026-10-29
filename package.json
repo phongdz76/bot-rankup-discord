@@ -1,12 +1,15 @@
 {
   "name": "bot-rankup-discord",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Discord XP Ranking & Auto Role Bot - Phong cách Hu Tao",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "register": "node scripts/register-commands.js",
+    "test": "node --test --test-concurrency=1",
+    "check": "node scripts/check.js"
   },
   "keywords": [
     "discord",
@@ -16,15 +19,29 @@
     "xp",
     "hutao"
   ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "author": "phongdz76",
   "license": "ISC",
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.13",
+    "connect-mongo": "^6.0.0",
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7",
+    "ejs": "^7.0.2",
     "express": "^4.21.2",
-    "mongoose": "^8.12.1"
+    "express-rate-limit": "^8.7.1",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "mongoose": "^8.12.1",
+    "passport": "^0.7.0",
+    "passport-oauth2": "^1.8.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "mongodb-memory-server": "^11.3.0",
+    "nodemon": "^3.1.14",
+    "playwright-core": "^1.64.1",
+    "supertest": "^7.3.1"
   }
 }

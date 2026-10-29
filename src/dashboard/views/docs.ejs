@@ -1,0 +1,93 @@
+<%- include('partials/header') %>
+<main id="main" class="container page-content guide-page">
+  <p class="eyebrow">Hướng dẫn sử dụng</p>
+  <h1>Bắt đầu cùng Hutao-Chan</h1>
+  <p class="lead">Mời bot vào máy chủ, bật tính năng bạn thích và cùng bạn bè lên cấp.</p>
+
+  <div class="actions guide-actions"><a class="button primary" href="<%= inviteUrl %>">Mời bot vào máy chủ ↗</a><a class="button secondary" href="/servers">Quản lý máy chủ →</a></div>
+  <div class="docs-layout">
+    <aside class="sidebar docs-nav" aria-label="Mục lục hướng dẫn">
+      <a href="#bat-dau">Thêm bot vào máy chủ</a>
+      <a href="#chao-don">Chào đón &amp; Tạm biệt</a>
+      <a href="#level">Cấp độ và phần thưởng</a>
+      <a href="#lenh">Các lệnh hay dùng</a>
+      <a href="#faq">Câu hỏi thường gặp</a>
+      <a href="#meo-hay">Cài đặt thường dùng</a>
+    </aside>
+    <div class="docs-body">
+      <section id="bat-dau" class="guide-section">
+        <h2>Thêm bot vào máy chủ</h2>
+        <ol class="setup-steps">
+          <li><h3>Mời bot</h3><p>Bấm <strong>Mời bot vào máy chủ</strong>, chọn máy chủ của bạn trên Discord rồi xác nhận các quyền được yêu cầu.</p></li>
+          <li><h3>Đăng nhập bằng Discord</h3><p>Bấm <strong>Đăng nhập Discord</strong> ở đầu trang và chọn <strong>Ủy quyền</strong>. Dùng tài khoản bạn đang quản lý máy chủ.</p></li>
+          <li><h3>Chọn máy chủ để cài đặt</h3><p>Mở <strong>Máy chủ của tôi</strong>, chọn <strong>Quản lý máy chủ</strong>. Bật tính năng bạn muốn dùng rồi bấm <strong>Lưu thay đổi</strong>.</p></li>
+        </ol>
+        <details class="inline-help"><summary>Không tìm thấy máy chủ của bạn?</summary><p>Bạn cần quyền <strong>Quản lý máy chủ</strong> hoặc <strong>Quản trị viên</strong>. Nếu chưa có, nhờ chủ máy chủ cấp quyền hoặc cài đặt giúp.</p></details>
+        <p>Ngay khi bot tham gia, thành viên có thể trò chuyện để nhận điểm. Bạn có thể bật lời chào và thêm phần thưởng sau.</p>
+      </section>
+
+      <section id="chao-don" class="guide-section">
+        <h2>Chào đón &amp; Tạm biệt</h2>
+        <ol class="steps">
+          <li>Trong trang quản lý, chọn <strong>Chào đón &amp; Tạm biệt</strong>.</li>
+          <li>Bật <strong>Chào mừng thành viên mới</strong>, rồi chọn kênh nhận lời chào, chẳng hạn <strong>#chào-mừng</strong>.</li>
+          <li>Viết nội dung bạn thích. Dùng các nút <strong>Gắn thẻ thành viên</strong>, <strong>Tên máy chủ</strong> để bot tự điền thông tin khi gửi.</li>
+          <li>Xem lời chào mẫu bên dưới. Chọn <strong>Gửi trong khung nổi bật</strong> nếu muốn tin nhắn có khung màu.</li>
+          <li>Bấm <strong>Lưu thay đổi</strong>. Bot sẽ gửi lời chào khi có người mới tham gia.</li>
+        </ol>
+        <div class="message-example" aria-label="Ví dụ tin nhắn trên Discord"><img src="/assets/favicon.svg" alt="" width="40" height="40"><div><div class="message-author"><strong>Hutao-Chan</strong><span>Ứng dụng</span><small>Lời chào mẫu</small></div><p>Chào <strong>@Minh</strong>, mừng bạn đến với <strong>Quán Trà Nhỏ</strong>! Cùng vào kênh trò chuyện làm quen nhé.</p></div></div>
+        <p>Muốn gửi lời tạm biệt khi có người rời đi? Làm tương tự ở phần <strong>Tạm biệt thành viên rời máy chủ</strong>. Bạn có thể chọn một kênh khác cho lời tạm biệt.</p>
+      </section>
+
+      <section id="level" class="guide-section">
+        <h2>Cấp độ và phần thưởng</h2>
+        <dl class="xp-rules">
+          <div><dt>Tin nhắn</dt><dd><strong>10–15 điểm mỗi lần</strong><span>Mặc định chờ 30 giây giữa hai lần nhận điểm.</span></dd></div>
+          <div><dt>Phòng thoại</dt><dd><strong>2 điểm mỗi phút</strong><span>Cần ít nhất hai người hợp lệ, không tắt mic hoặc tai nghe.</span></dd></div>
+        </dl>
+        <p>Điểm kinh nghiệm còn được gọi là <strong>XP</strong>. Tích lũy đủ điểm, thành viên sẽ lên cấp. Mỗi máy chủ có điểm và bảng xếp hạng riêng.</p>
+        <h3>Trao vai trò khi thành viên đạt một cấp độ</h3>
+        <ol class="steps">
+          <li>Tạo sẵn vai trò trên Discord, chẳng hạn <strong>Thành viên tích cực</strong>.</li>
+          <li>Trong trang quản lý, mở <strong>Phần thưởng vai trò</strong> và bấm <strong>Thêm phần thưởng</strong>.</li>
+          <li>Nhập cấp độ cần đạt, ví dụ <strong>5</strong>, rồi chọn vai trò bạn vừa tạo.</li>
+          <li>Bấm <strong>Lưu thay đổi</strong>. Vai trò sẽ được cập nhật khi thành viên nhận điểm lần tiếp theo.</li>
+        </ol>
+        <h3>Chọn cách giữ phần thưởng</h3>
+        <p><strong>Giữ tất cả vai trò đã đạt:</strong> thành viên nhận thêm vai trò mới và giữ các vai trò thưởng cũ.</p>
+        <p><strong>Chỉ giữ vai trò thưởng cao nhất:</strong> khi đạt mốc mới, bot thay vai trò thưởng cũ bằng vai trò mới. Cách này cần có ít nhất một phần thưởng.</p>
+        <details class="inline-help"><summary>Thành viên chưa nhận được vai trò?</summary><p>Mở <strong>Cài đặt máy chủ → Vai trò</strong> trên Discord. Đặt vai trò Hutao-Chan trên các vai trò thưởng và cấp quyền <strong>Quản lý vai trò</strong> cho bot.</p></details>
+      </section>
+
+      <section id="lenh" class="guide-section">
+        <h2>Các lệnh hay dùng</h2>
+        <p>Mở kênh trò chuyện trong máy chủ, gõ dấu <strong>/</strong>, chọn Hutao-Chan rồi chọn lệnh bạn muốn dùng.</p>
+        <div class="command-guide">
+          <article><span class="command-name">/rank</span><div><h3>Xem cấp độ của bạn</h3><p>Bot gửi một thẻ hồ sơ với cấp độ, điểm, thứ hạng và thời gian trò chuyện. Muốn xem của bạn khác, chọn người đó ở mục <strong>user</strong> trước khi gửi lệnh.</p></div></article>
+          <article><span class="command-name">/leaderboard</span><div><h3>Xem ai đang dẫn đầu</h3><p>Hiển thị 10 thành viên có thứ hạng cao nhất trong máy chủ.</p></div></article>
+          <article><span class="command-name">/help</span><div><h3>Xem trợ giúp nhanh</h3><p>Xem danh sách lệnh, cách nhận điểm hiện tại và đường dẫn đến trang quản lý.</p></div></article>
+        </div>
+        <p>Người có quyền quản lý máy chủ còn dùng được <strong>/setup</strong> để cài đặt ngay trong Discord. Bạn cũng có thể thực hiện các cài đặt đó bằng các nút trên trang quản lý.</p>
+      </section>
+
+      <section id="faq" class="guide-section">
+        <h2>Câu hỏi thường gặp</h2>
+        <details><summary>Tôi bấm đăng nhập nhưng chưa vào được, phải làm sao?</summary><p>Đóng các tab đăng nhập cũ, quay lại trang chủ rồi bấm <strong>Đăng nhập Discord</strong> một lần nữa. Nhớ chọn <strong>Ủy quyền</strong> và cho phép trình duyệt lưu cookie. Nếu vẫn gặp lỗi, hãy báo cho người quản lý Hutao-Chan.</p></details>
+        <details><summary>Vì sao bot chưa gửi lời chào?</summary><p>Kiểm tra đã bật lời chào, chọn đúng kênh và bấm <strong>Lưu thay đổi</strong>. Trong quyền của kênh đó, cho phép Hutao-Chan <strong>Xem kênh</strong>, <strong>Gửi tin nhắn</strong> và <strong>Nhúng liên kết</strong> nếu dùng khung nổi bật. Lời chào được gửi khi có thành viên mới tham gia.</p></details>
+        <details><summary>Nhắn tin liên tục có được thêm điểm không?</summary><p>Không phải tin nhắn nào cũng có điểm. Mặc định, bot chờ <strong>30 giây</strong> giữa hai lần cộng điểm cho cùng một người. Kênh hoặc vai trò được người quản lý loại trừ cũng không được tính điểm.</p></details>
+        <details><summary>Tôi ở phòng thoại nhưng không nhận điểm?</summary><p>Cần có ít nhất hai người đủ điều kiện cùng trò chuyện. Bot không tính người tắt mic, tắt tai nghe, bị máy chủ tắt tiếng hoặc ở kênh chờ vắng mặt. Bạn cần tham gia đủ một phút hợp lệ; thời gian bot ngoại tuyến không được cộng bù.</p></details>
+        <details><summary>Bot tạm ngừng có làm mất cấp độ không?</summary><p>Cấp độ và số điểm đã lưu vẫn được giữ khi bot khởi động lại. Bot sẽ tiếp tục ghi nhận hoạt động sau khi kết nối trở lại.</p></details>
+        <details><summary>Đặt lại cài đặt có xóa điểm của thành viên không?</summary><p>Không. Thao tác này chỉ đưa các cài đặt về mặc định. Điểm, cấp độ và các vai trò đã trao vẫn được giữ.</p></details>
+      </section>
+
+      <section id="meo-hay" class="guide-section">
+        <h2>Cài đặt thường dùng</h2>
+        <h3>Dành một kênh riêng để chúc mừng lên cấp</h3><p>Tạo kênh như <strong>#vinh-danh</strong>, sau đó chọn kênh này trong mục <strong>Kênh thông báo</strong>. Các thông báo sẽ không làm gián đoạn cuộc trò chuyện chính.</p>
+        <h3>Bỏ qua kênh không cần tính điểm</h3><p>Vào <strong>Tùy chọn khác</strong>, đánh dấu các kênh hoặc vai trò không tính điểm, rồi bấm <strong>Lưu thay đổi</strong>.</p>
+        <h3>Bắt đầu với ít phần thưởng</h3><p>Bạn có thể thử các mốc cấp 5, 10 và 20 với tên vai trò phù hợp với cộng đồng. Thêm các mốc mới bất cứ lúc nào bạn muốn.</p>
+        <div class="actions"><a class="button primary" href="/servers">Mở máy chủ của tôi →</a><a class="button secondary" href="#bat-dau">Xem lại cách bắt đầu ↑</a></div>
+      </section>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

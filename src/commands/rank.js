@@ -1,82 +1,33 @@
-import {
-  SlashCommandBuilder,
-  ApplicationIntegrationType,
-  InteractionContextType
-} from 'discord.js';
+import { SlashCommandBuilder, ApplicationIntegrationType, InteractionContextType, AttachmentBuilder, MessageFlags } from 'discord.js';
 import { User } from '../models/User.js';
-import { calculateLevelData, getRankTierForLevel, syncUserLevelFromRoles } from '../core/level.js';
+import { calculateLevelData, getRankTierForLevel } from '../core/level.js';
+import { getGuildConfig } from '../services/guildConfig.js';
+import { ensureUser } from '../services/xp.js';
 import { createRankEmbed } from '../utils/embed.js';
+import { createRankCard } from '../utils/rankCard.js';
 
-export const data = new SlashCommandBuilder()
-  .setName('rank')
-  .setDescription('Xem thông tin cấp độ và tiến trình kinh nghiệm cá nhân')
-  .setIntegrationTypes([
-    ApplicationIntegrationType.GuildInstall,
-    ApplicationIntegrationType.UserInstall
-  ])
-  .setContexts([
-    InteractionContextType.Guild,
-    InteractionContextType.BotDM,
-    InteractionContextType.PrivateChannel
-  ])
-  .addUserOption((option) =>
-    option
-      .setName('user')
-      .setDescription('Chọn thành viên bạn muốn xem hồ sơ')
-      .setRequired(false)
-  );
+export const data = new SlashCommandBuilder().setName('rank')
+  .setDescription('Xem rank card và tiến trình XP trong server')
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
+  .setContexts(InteractionContextType.Guild)
+  .addUserOption(o => o.setName('user').setDescription('Thành viên muốn xem'));
 
-/**
- * Thực thi lệnh /rank
- * @param {import('discord.js').ChatInputCommandInteraction} interaction
- */
 export async function execute(interaction) {
+  if (!interaction.inGuild()) return interaction.reply({ content: 'Dùng lệnh này trong server.', flags: MessageFlags.Ephemeral });
   await interaction.deferReply();
-
-  const targetUser = interaction.options.getUser('user') || interaction.user;
-  const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-  const userId = targetUser.id;
-  const guildId = interaction.guild.id;
-
+  const user = interaction.options.getUser('user') || interaction.user;
+  const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+  const settings = await getGuildConfig(interaction.guildId);
+  const userDoc = member ? await ensureUser(member, settings) :
+    await User.findOne({ guildId: interaction.guildId, userId: user.id }).lean() || { xp: 0 };
+  const serverRank = await User.countDocuments({ guildId: interaction.guildId, xp: { $gt: userDoc.xp } }) + 1;
+  const levelData = calculateLevelData(userDoc.xp);
+  const params = { user, member, userDoc, levelData, serverRank, rankTier: getRankTierForLevel(levelData.level, settings) };
   try {
-    let userDoc = await User.findOne({ userId, guildId });
-    userDoc = await syncUserLevelFromRoles(targetMember, userDoc);
-    if (!userDoc) {
-      userDoc = {
-        userId,
-        guildId,
-        xp: 0,
-        level: 0,
-        messageCount: 0,
-        totalVoiceMinutes: 0
-      };
-    }
-
-    // Tính thứ hạng xếp hạng trong Server
-    const serverRank =
-      (await User.countDocuments({
-        guildId,
-        xp: { $gt: userDoc.xp || 0 }
-      })) + 1;
-
-    const levelData = calculateLevelData(userDoc.xp || 0);
-    const rankTier = getRankTierForLevel(levelData.level);
-
-    const embed = createRankEmbed({
-      user: targetUser,
-      member: targetMember,
-      userDoc,
-      levelData,
-      rankTier,
-      serverRank
-    });
-
-    await interaction.editReply({ embeds: [embed] });
+    const card = await createRankCard(params);
+    await interaction.editReply({ files: [new AttachmentBuilder(card, { name: 'hutao-rank.png' })] });
   } catch (error) {
-    console.error(`[Command /rank] [ERROR]:`, error.message);
-    await interaction.editReply({
-      content: 'Đã xảy ra sự cố khi truy xuất dữ liệu cấp độ.'
-    });
+    console.error('[RankCard]', error.message);
+    await interaction.editReply({ embeds: [createRankEmbed(params)] });
   }
 }

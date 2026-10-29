@@ -1,45 +1,47 @@
+import mongoose from 'mongoose';
 import { connectDatabase } from './services/database.js';
 import { initDiscordClient, client } from './services/discord.js';
 import { startWebServer } from './server.js';
 import { stopVoiceXpTracker } from './core/voiceXp.js';
 
+let web;
+let stopping = false;
 async function bootstrap() {
-  console.log('--- KHOI DONG BOT DISCORD RANKUP (HUTAO) ---');
-
-  // 1. Khoi dong Express Web Server (Keep-Alive 24/7)
-  startWebServer();
-
-  // 2. Ket noi Co so du lieu MongoDB Atlas
-  const dbConnected = await connectDatabase();
-  if (!dbConnected) {
-    console.warn('[Bootstrap] [WARN] Bot tiep tuc khoi dong nhung tinh nang luu tru se bi han che neu chua cau hinh MongoDB.');
+  console.log('[Bootstrap] Khởi động Hutao-Chan v2');
+  const connected = await connectDatabase();
+  web = startWebServer(client);
+  if (!connected) {
+    console.warn('[Bootstrap] MongoDB chưa sẵn sàng; bot không đăng nhập để tránh mất XP. /health trả 503.');
+    return;
   }
-
-  // 3. Ket noi Discord Gateway
   await initDiscordClient();
 }
 
-// Xu ly tat bot an toan khi dung chuong trinh
-function handleGracefulShutdown(signal) {
-  console.log(`\n[Process] [INFO] Nhan tin hieu ${signal}, dang tat bot an toan...`);
+async function shutdown(signal, code = 0) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[Process] ${signal}: đang đóng kết nối...`);
+  const timeout = setTimeout(() => process.exit(1), 10000).unref();
   stopVoiceXpTracker();
-  if (client) {
-    client.destroy();
-  }
-  process.exit(0);
+  client.destroy();
+  if (web?.server) await new Promise(resolve => web.server.close(resolve));
+  await web?.store?.close();
+  await mongoose.disconnect();
+  clearTimeout(timeout);
+  process.exitCode = code;
 }
 
-process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Process] [ERROR] Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('unhandledRejection', error => {
+  console.error('[Process] Unhandled rejection:', error instanceof Error ? error.message : 'Unknown error');
+  void shutdown('unhandledRejection', 1);
 });
-
-process.on('uncaughtException', (error) => {
-  console.error('[Process] [ERROR] Uncaught Exception:', error);
+process.on('uncaughtException', error => {
+  console.error('[Process] Uncaught exception:', error.message);
+  void shutdown('uncaughtException', 1);
 });
-
-bootstrap().catch((error) => {
-  console.error('[Bootstrap] [FATAL] Khoi dong bot that bai:', error);
+bootstrap().catch(error => {
+  console.error('[Bootstrap]', error.message);
+  void shutdown('bootstrap failed', 1);
 });
