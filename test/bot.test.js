@@ -539,7 +539,6 @@ test('OAuth callback shows a support code and logs sanitized exchange diagnostic
     dashboard: { clientSecret: 'test-client-secret', sessionSecret: '0123456789abcdef'.repeat(6), callbackUrl: 'http://localhost/auth/discord/callback' } };
   let exchangeError;
   t.mock.method(OAuth2.prototype, 'getOAuthAccessToken', function(code, params, done) { done(exchangeError); });
-  const app = createWebApp({ client, settings, store: new session.MemoryStore(), authLogger: failure => failures.push(failure) });
   const cases = [
     [{ statusCode: 429, data: '<html>private-response-body</html>' }, 'OAUTH_RATE_LIMITED', { httpStatus: 429 }],
     [{ statusCode: 403, data: '<html>private-response-body</html>' }, 'OAUTH_ACCESS_BLOCKED', { httpStatus: 403 }],
@@ -547,11 +546,12 @@ test('OAuth callback shows a support code and logs sanitized exchange diagnostic
     [{ statusCode: 401, data: '{"error":"invalid_client","error_description":"private-client-secret"}' }, 'OAUTH_CLIENT_REJECTED', {}],
   ];
   for (const [error, code, diagnostics] of cases) {
+    const app = createWebApp({ client, settings, store: new session.MemoryStore(), authLogger: failure => failures.push(failure) });
     exchangeError = error;
     const agent = request.agent(app);
     const login = await agent.get('/auth/discord').expect(302);
     const state = new URL(login.headers.location).searchParams.get('state');
-    const callback = await agent.get('/auth/discord/callback').query({ code: 'private-authorization-code', state }).expect(401);
+    const callback = await agent.get('/auth/discord/callback').query({ code: 'private-authorization-code', state }).expect(error.statusCode === 429 ? 429 : 401);
     assert(callback.text.includes(`Mã hỗ trợ: <code>${code}</code>`));
     assert(callback.text.includes('href="/auth/discord"'));
     const failure = failures.at(-1);
@@ -560,6 +560,30 @@ test('OAuth callback shows a support code and logs sanitized exchange diagnostic
     assert(!callback.text.includes('private-'));
     assert(!JSON.stringify(failure).includes('private-'));
   }
+});
+
+test('OAuth 429 pauses new authorization attempts across sessions instead of calling Discord again', async t => {
+  const { client } = fixture();
+  const settings = { ...config, production: false,
+    dashboard: { clientSecret: 'test-client-secret', sessionSecret: '0123456789abcdef'.repeat(6), callbackUrl: 'http://localhost/auth/discord/callback' } };
+  let exchanges = 0;
+  t.mock.method(OAuth2.prototype, 'getOAuthAccessToken', function(code, params, done) {
+    exchanges++;
+    done({ statusCode: 429, data: '{"retry_after":120,"global":false}' });
+  });
+  const app = createWebApp({ client, settings, store: new session.MemoryStore(), authLogger: () => {} });
+  const agent = request.agent(app);
+  const login = await agent.get('/auth/discord').expect(302);
+  const state = new URL(login.headers.location).searchParams.get('state');
+  const callback = await agent.get('/auth/discord/callback').query({ code: 'private-authorization-code', state }).expect(429);
+  assert(Number(callback.headers['retry-after']) > 0);
+  const blockedLogin = await request(app).get('/auth/discord').expect(429);
+  assert(!blockedLogin.headers.location);
+  assert(Number(blockedLogin.headers['retry-after']) <= 120);
+  const blockedCallback = await agent.get('/auth/discord/callback').query({ code: 'another-private-code', state }).expect(429);
+  assert(blockedCallback.text.includes('OAUTH_RATE_LIMITED'));
+  assert(!blockedCallback.text.includes('another-private-code'));
+  assert.equal(exchanges, 1);
 });
 
 test('OAuth callback persists state in encrypted Mongo sessions across app restart and completes login', async t => {

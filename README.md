@@ -117,13 +117,17 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 - `POST /api/guilds/:id/settings`: body `{ settings, revision }`, header `x-csrf-token`.
 - `POST /api/guilds/:id/reset`: body `{ confirm: true, revision }`, yêu cầu CSRF.
 - `GET /api/guilds/:id/leaderboard?page=1`: 10 người/trang, trả `entries`, `memberCount`, `page`, `pageSize`, `totalPages`; yêu cầu quyền quản lý. Trang vượt cuối được đưa về trang cuối, trang không phải số nguyên dương nhận HTTP 400.
-- `GET /health`: HTTP 200 khi MongoDB và Discord đã kết nối, 503 nếu một trong hai chưa sẵn sàng.
+- `GET /health`: HTTP 200 khi MongoDB và Discord Gateway đã kết nối, 503 nếu một trong hai chưa sẵn sàng. `discord: true` không kiểm chứng việc gửi HTTP callback hoặc đổi token OAuth; các yêu cầu đó vẫn có thể bị Discord trả 429.
 
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
 
 Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.
 
 Khi đăng nhập lỗi trên Render, xem `[OAuth]` trong Logs: `OAUTH_CLIENT_REJECTED` là Discord từ chối thông tin ứng dụng; `OAUTH_RATE_LIMITED` đi kèm HTTP 429; `OAUTH_ACCESS_BLOCKED` đi kèm HTTP 403; `OAUTH_NETWORK_FAILED` đi kèm mã DNS/kết nối. Không kết luận secret sai chỉ từ `OAUTH_EXCHANGE_FAILED`. Nếu `/health` báo `discord: false`, xem thêm `[Discord REST]` và `[Discord] LOGIN_PENDING`/`SHARD_ERROR`/`SHARD_DISCONNECTED`; các log này không ghi URL tương tác chứa token.
+
+Log 429 giữ `retryAfterSeconds`, `scope`, `global`, `responseFormat`, `cfRay` nếu phản hồi có những dữ liệu này. OAuth có thể ghi `cloudflareError: 1015` khi body xác nhận đúng mã đó; chỉ HTTP 429 chưa đủ chứng minh IP bị chặn. Thư viện OAuth hiện giữ status/body nhưng không giữ response headers trong lỗi, nên metadata OAuth có thể ít hơn log Discord REST. Tuân theo `Retry-After`/`retry_after`; không suy ra thời gian chờ cố định và không tự động đổi IP để gửi lại. Khi local hoạt động nhưng Render trả 429 cho cả OAuth và callback, cung cấp log đã che credentials cho Render/Discord Support để kiểm tra phạm vi giới hạn và kết nối outbound. Nguồn: [Discord rate limits](https://docs.discord.com/developers/topics/rate-limits), [Render outbound IPs](https://render.com/docs/outbound-ip-addresses).
+
+Sau OAuth 429, các lượt đăng nhập/callback mới cùng tiến trình tạm nhận HTTP 429 và `Retry-After` từ ứng dụng, không gửi thêm yêu cầu tới Discord trong thời gian nghỉ. Ưu tiên thời gian do Discord cung cấp; nếu không có, ứng dụng nghỉ 60 giây (không cam kết Discord đã gỡ giới hạn sau thời gian này). Callback lệnh bị 429 dừng ngay thay vì chờ rồi gửi lại một interaction đã hết hạn; lệnh gặp giới hạn vẫn có thể hiện lỗi trong Discord, người dùng cần đợi rồi gọi lệnh mới. Những thay đổi này giảm yêu cầu lặp, không tự gỡ được giới hạn tại Discord/edge.
 
 Cấu hình có trường `revision`: khi hai cửa sổ cập nhật cùng lúc, yêu cầu dùng phiên bản cũ nhận HTTP 409. Tải lại trước khi chỉnh tiếp.
 

@@ -3,6 +3,7 @@ import {
   GatewayIntentBits,
   REST,
   RESTEvents,
+  RateLimitError,
   Routes,
   Collection,
   Events,
@@ -10,6 +11,7 @@ import {
 } from 'discord.js';
 import { config } from '../config/index.js';
 import { getErrorDiagnostics } from '../utils/errors.js';
+import { getRateLimitDiagnostics } from '../utils/rateLimit.js';
 import { handleChatMessage } from '../core/chatXp.js';
 import { startVoiceXpTracker, handleVoiceStateUpdate } from '../core/voiceXp.js';
 import { handleMemberEvent } from '../core/welcome.js';
@@ -20,6 +22,8 @@ import * as helpCommand from '../commands/help.js';
 import * as setupCommand from '../commands/setup.js';
 
 export const client = new Client({
+  // Callback hết hạn nhanh: không xếp lại vào hàng đợi khi đã nhận 429.
+  rest: { rejectOnRateLimit: ['/interactions/'] },
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -32,7 +36,10 @@ export const client = new Client({
 // Không ghi route/URL: đường dẫn phản hồi tương tác có chứa token.
 function attachRestDiagnostics(rest) {
   rest.on(RESTEvents.Response, (_request, response) => {
-    if (response.status >= 400) console.warn('[Discord REST] HTTP_ERROR', JSON.stringify({ httpStatus: response.status }));
+    if (response.status >= 400) console.warn('[Discord REST] HTTP_ERROR', JSON.stringify({
+      httpStatus: response.status,
+      ...(response.status === 429 ? getRateLimitDiagnostics(response) : {}),
+    }));
   });
   rest.on(RESTEvents.RateLimited, info => {
     console.warn('[Discord REST] RATE_LIMITED', JSON.stringify({
@@ -135,6 +142,13 @@ export async function initDiscordClient() {
       console.log(`[Discord] [INFO] Dang thuc thi /${interaction.commandName} tu user ${interaction.user.tag} (${interaction.user.id})`);
       await command.execute(interaction);
     } catch (error) {
+      if (error instanceof RateLimitError) {
+        console.warn('[Discord] INTERACTION_RATE_LIMITED', JSON.stringify({
+          command: interaction.commandName,
+          ...getRateLimitDiagnostics({ retryAfterSeconds: error.retryAfter / 1000, scope: error.scope, global: error.global }),
+        }));
+        return;
+      }
       console.error(`[Discord] [ERROR] Loi khi thuc thi lenh ${interaction.commandName}:`, error.message);
       // Token hết hạn hoặc một kết nối bot khác đã nhận lệnh: không gửi phản hồi lần nữa.
       if ([10062, 40060].includes(error.code)) return;

@@ -1,3 +1,5 @@
+import { getRateLimitDiagnostics } from './rateLimit.js';
+
 const networkCodes = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN',
   'ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT',
@@ -16,6 +18,7 @@ export function getErrorDiagnostics(error) {
     seen.add(current);
     const status = current.httpStatus ?? current.statusCode ?? current.status;
     if (!diagnostics.httpStatus && Number.isInteger(status) && status >= 100 && status <= 599) diagnostics.httpStatus = status;
+    if (status === 429) Object.assign(diagnostics, getRateLimitDiagnostics(current));
     const networkCode = current.networkCode ?? current.code;
     if (!diagnostics.networkCode && networkCodes.has(networkCode)) diagnostics.networkCode = networkCode;
     const clientCode = current.clientCode ?? current.code;

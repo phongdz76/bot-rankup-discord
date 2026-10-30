@@ -3,8 +3,10 @@ import { Strategy as OAuth2Strategy } from 'passport-oauth2';
 import { rateLimit } from 'express-rate-limit';
 import { csrfProtection } from './middleware/auth.js';
 import { describeAuthFailure, logAuthFailure } from './authFailure.js';
+import { createOAuthCooldown } from './oauthCooldown.js';
 
 export function configureAuth(app, settings, api, authLogger = logAuthFailure) {
+  const cooldown = createOAuthCooldown();
   const passport = new Passport();
   passport.serializeUser((user, done) => done(null, user));
   passport.deserializeUser((user, done) => done(null, user));
@@ -24,13 +26,25 @@ export function configureAuth(app, settings, api, authLogger = logAuthFailure) {
   app.use(passport.initialize());
   app.use(passport.session());
   const limiter = rateLimit({ windowMs: 60000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
-  app.get('/auth/discord', limiter, passport.authenticate('discord'));
-  app.get('/auth/discord/callback', limiter, (req, res, next) => {
+  const waitForDiscord = (req, res, next) => {
+    const seconds = cooldown.remainingSeconds();
+    if (!seconds) return next();
+    res.set('Retry-After', String(seconds));
+    return res.status(429).render('error', {
+      title: 'Đăng nhập tạm gián đoạn', supportCode: 'OAUTH_RATE_LIMITED',
+      message: `Máy chủ đang tạm nghỉ sau khi Discord giới hạn yêu cầu. Hãy thử lại sau ít nhất ${seconds} giây.`,
+    });
+  };
+  app.get('/auth/discord', limiter, waitForDiscord, passport.authenticate('discord'));
+  app.get('/auth/discord/callback', limiter, waitForDiscord, (req, res, next) => {
     passport.authenticate('discord', (error, user, info) => {
       if (error || !user) {
         const failure = describeAuthFailure(error, info, req.query.error);
+        cooldown.record(failure);
         void Promise.resolve(authLogger(failure)).catch(() => {});
-        return res.status(401).render('error', {
+        const seconds = cooldown.remainingSeconds();
+        if (seconds) res.set('Retry-After', String(seconds));
+        return res.status(failure.httpStatus === 429 ? 429 : 401).render('error', {
           title: 'Đăng nhập chưa thành công', message: failure.message, supportCode: failure.code,
         });
       }

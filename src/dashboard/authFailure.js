@@ -32,7 +32,10 @@ function classifyAuthFailure(error, info, queryError, diagnostics) {
     return { code: 'OAUTH_CODE_REJECTED', message: 'Liên kết xác nhận đã hết hạn hoặc đã được dùng. Hãy bấm Đăng nhập lại để bắt đầu lượt mới.' };
   }
   if (diagnostics.httpStatus === 429) {
-    return { code: 'OAUTH_RATE_LIMITED', message: 'Discord đang giới hạn yêu cầu từ máy chủ đăng nhập. Hãy chờ ít phút rồi bắt đầu đăng nhập lại từ trang chủ.' };
+    let guidance = 'Discord chưa cung cấp thời gian chờ trong phản hồi này. Hãy gửi mã hỗ trợ bên dưới cho người quản lý bot.';
+    if (diagnostics.retryAfterSeconds > 0) guidance = `Hãy chờ ít nhất ${Math.ceil(diagnostics.retryAfterSeconds)} giây rồi bắt đầu đăng nhập lại từ trang chủ.`;
+    else if (diagnostics.retryAfterSeconds === 0) guidance = 'Hãy bắt đầu lượt đăng nhập mới từ trang chủ.';
+    return { code: 'OAUTH_RATE_LIMITED', message: `Discord đang giới hạn yêu cầu từ máy chủ đăng nhập. ${guidance}` };
   }
   if (diagnostics.httpStatus === 403) {
     return { code: 'OAUTH_ACCESS_BLOCKED', message: 'Discord đang từ chối yêu cầu từ máy chủ đăng nhập. Hãy gửi mã hỗ trợ bên dưới cho người quản lý bot.' };
