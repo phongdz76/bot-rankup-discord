@@ -121,7 +121,9 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
 
-Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã chẩn đoán; `logs/oauth.log` chỉ ghi thời điểm và mã lỗi, không ghi code/token/state/secret.
+Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.
+
+Khi đăng nhập lỗi trên Render, xem `[OAuth]` trong Logs: `OAUTH_CLIENT_REJECTED` là Discord từ chối thông tin ứng dụng; `OAUTH_RATE_LIMITED` đi kèm HTTP 429; `OAUTH_ACCESS_BLOCKED` đi kèm HTTP 403; `OAUTH_NETWORK_FAILED` đi kèm mã DNS/kết nối. Không kết luận secret sai chỉ từ `OAUTH_EXCHANGE_FAILED`. Nếu `/health` báo `discord: false`, xem thêm `[Discord REST]` và `[Discord] LOGIN_PENDING`/`SHARD_ERROR`/`SHARD_DISCONNECTED`; các log này không ghi URL tương tác chứa token.
 
 Cấu hình có trường `revision`: khi hai cửa sổ cập nhật cùng lúc, yêu cầu dùng phiên bản cũ nhận HTTP 409. Tải lại trước khi chỉnh tiếp.
 

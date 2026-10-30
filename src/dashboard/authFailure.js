@@ -1,8 +1,14 @@
 import { appendFile, mkdir } from 'node:fs/promises';
+import { getErrorDiagnostics } from '../utils/errors.js';
 
 const knownCodes = new Set(['invalid_client', 'invalid_grant', 'access_denied', 'invalid_scope', 'invalid_request', 'server_error', 'temporarily_unavailable']);
 
 export function describeAuthFailure(error, info, queryError) {
+  const diagnostics = getErrorDiagnostics(error);
+  return { ...classifyAuthFailure(error, info, queryError, diagnostics), ...diagnostics };
+}
+
+function classifyAuthFailure(error, info, queryError, diagnostics) {
   let oauthCode = knownCodes.has(error?.code) ? error.code : undefined;
   if (!oauthCode && error?.oauthError?.data) {
     try {
@@ -25,6 +31,18 @@ export function describeAuthFailure(error, info, queryError) {
   if (oauthCode === 'invalid_grant') {
     return { code: 'OAUTH_CODE_REJECTED', message: 'Liên kết xác nhận đã hết hạn hoặc đã được dùng. Hãy bấm Đăng nhập lại để bắt đầu lượt mới.' };
   }
+  if (diagnostics.httpStatus === 429) {
+    return { code: 'OAUTH_RATE_LIMITED', message: 'Discord đang giới hạn yêu cầu từ máy chủ đăng nhập. Hãy chờ ít phút rồi bắt đầu đăng nhập lại từ trang chủ.' };
+  }
+  if (diagnostics.httpStatus === 403) {
+    return { code: 'OAUTH_ACCESS_BLOCKED', message: 'Discord đang từ chối yêu cầu từ máy chủ đăng nhập. Hãy gửi mã hỗ trợ bên dưới cho người quản lý bot.' };
+  }
+  if (diagnostics.httpStatus >= 500) {
+    return { code: 'OAUTH_PROVIDER_UNAVAILABLE', message: 'Dịch vụ đăng nhập Discord đang gặp sự cố. Hãy thử lại sau ít phút.' };
+  }
+  if (diagnostics.networkCode) {
+    return { code: 'OAUTH_NETWORK_FAILED', message: 'Máy chủ đăng nhập chưa kết nối được với Discord. Hãy gửi mã hỗ trợ bên dưới cho người quản lý bot.' };
+  }
   if (error?.authStage === 'profile') {
     return { code: 'OAUTH_PROFILE_FAILED', message: 'Chưa lấy được hồ sơ của bạn từ Discord. Hãy thử đăng nhập lại sau ít phút.' };
   }
@@ -32,9 +50,10 @@ export function describeAuthFailure(error, info, queryError) {
 }
 
 export async function logAuthFailure(failure) {
-  // Chỉ ghi mã chẩn đoán cố định; không ghi token, secret, code, state, cookie hoặc URL callback.
-  const entry = JSON.stringify({ at: new Date().toISOString(), code: failure.code }) + '\n';
-  console.warn(`[OAuth] ${failure.code}`);
+  // Không ghi raw error: có thể chứa token, secret, code, state, cookie hoặc URL callback.
+  const diagnostics = getErrorDiagnostics(failure);
+  const entry = JSON.stringify({ at: new Date().toISOString(), code: failure.code, ...diagnostics }) + '\n';
+  console.warn(`[OAuth] ${failure.code}`, JSON.stringify(diagnostics));
   try {
     await mkdir(new URL('../../logs/', import.meta.url), { recursive: true });
     await appendFile(new URL('../../logs/oauth.log', import.meta.url), entry);

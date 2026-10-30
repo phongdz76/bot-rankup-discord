@@ -532,6 +532,36 @@ test('OAuth diagnostics distinguish configuration, session and expired-code erro
   assert(!JSON.stringify(describeAuthFailure({ code: 'secret-token', message: 'secret-token', oauthError: { data: 'secret-token' } })).includes('secret-token'));
 });
 
+test('OAuth callback shows a support code and logs sanitized exchange diagnostics', async t => {
+  const { client } = fixture();
+  const failures = [];
+  const settings = { ...config, production: false,
+    dashboard: { clientSecret: 'test-client-secret', sessionSecret: '0123456789abcdef'.repeat(6), callbackUrl: 'http://localhost/auth/discord/callback' } };
+  let exchangeError;
+  t.mock.method(OAuth2.prototype, 'getOAuthAccessToken', function(code, params, done) { done(exchangeError); });
+  const app = createWebApp({ client, settings, store: new session.MemoryStore(), authLogger: failure => failures.push(failure) });
+  const cases = [
+    [{ statusCode: 429, data: '<html>private-response-body</html>' }, 'OAUTH_RATE_LIMITED', { httpStatus: 429 }],
+    [{ statusCode: 403, data: '<html>private-response-body</html>' }, 'OAUTH_ACCESS_BLOCKED', { httpStatus: 403 }],
+    [Object.assign(new Error('private-network-message'), { code: 'ECONNRESET' }), 'OAUTH_NETWORK_FAILED', { networkCode: 'ECONNRESET' }],
+    [{ statusCode: 401, data: '{"error":"invalid_client","error_description":"private-client-secret"}' }, 'OAUTH_CLIENT_REJECTED', {}],
+  ];
+  for (const [error, code, diagnostics] of cases) {
+    exchangeError = error;
+    const agent = request.agent(app);
+    const login = await agent.get('/auth/discord').expect(302);
+    const state = new URL(login.headers.location).searchParams.get('state');
+    const callback = await agent.get('/auth/discord/callback').query({ code: 'private-authorization-code', state }).expect(401);
+    assert(callback.text.includes(`Mã hỗ trợ: <code>${code}</code>`));
+    assert(callback.text.includes('href="/auth/discord"'));
+    const failure = failures.at(-1);
+    assert.equal(failure.code, code);
+    for (const [key, value] of Object.entries(diagnostics)) assert.equal(failure[key], value);
+    assert(!callback.text.includes('private-'));
+    assert(!JSON.stringify(failure).includes('private-'));
+  }
+});
+
 test('OAuth callback persists state in encrypted Mongo sessions across app restart and completes login', async t => {
   const { client } = fixture();
   const settings = { ...config, clientId: guildId, mongoUri: mongo.getUri(), production: false,

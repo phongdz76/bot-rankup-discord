@@ -4,6 +4,7 @@
     <p class="eyebrow">Hutao-Chan</p>
     <h1><%= title %></h1>
     <p><%= message %></p>
+    <% if (typeof supportCode !== 'undefined') { %><p>Mã hỗ trợ: <code><%= supportCode %></code></p><% } %>
     <div class="actions centered-actions">
       <a class="button secondary" href="/">Về trang chủ</a>
       <% if (dashboardEnabled) { %><a class="button primary" href="/auth/discord">Đăng nhập lại ↗</a><% } else { %><a class="button primary" href="/docs#faq">Xem hướng dẫn trợ giúp ↗</a><% } %>
