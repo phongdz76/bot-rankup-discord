@@ -1,6 +1,8 @@
 import { User } from '../models/User.js';
 import { calculateLevelData, syncUserRoles, sendLevelUpNotification } from '../core/level.js';
 import { syncMemberRoleLevel as ensureUser } from './roleSync.js';
+import { preparePeriods } from './seasons.js';
+import { activityNight, unlockAchievements } from './achievements.js';
 
 export { ensureUser };
 
@@ -27,16 +29,25 @@ async function applyAward(member, settings, { source, xp, channel, now = new Dat
   await ensureUser(member, settings);
   const filter = { guildId: member.guild.id, userId: member.id };
   const increments = { xp };
-  const update = { $inc: increments };
+  const update = { $inc: increments, $set: {} };
   if (source === 'chat') {
     filter.$or = [{ lastMessageAt: null }, { lastMessageAt: { $lte: new Date(now.getTime() - settings.xpSettings.chat.cooldownSeconds * 1000) } }];
     increments.messageCount = 1;
-    update.$set = { lastMessageAt: now };
+    update.$set.lastMessageAt = now;
+    const night = activityNight(now);
+    if (night) update.$addToSet = { nightDates: night };
   } else {
     increments.totalVoiceMinutes = 1;
   }
+  for (const period of await preparePeriods(member.guild.id, now)) {
+    const path = `periodScores.${period.key}`;
+    increments[`${path}.xp`] = xp;
+    increments[`${path}.${source === 'chat' ? 'messageCount' : 'totalVoiceMinutes'}`] = 1;
+    update.$set[`${path}.displayName`] = member.displayName || member.user.username || member.id;
+  }
   const user = await User.findOneAndUpdate(filter, update, { new: true });
   if (!user) return null;
+  await unlockAchievements(user, now);
   const { level } = calculateLevelData(user.xp);
   const before = await User.findOneAndUpdate(
     { _id: user._id, level: { $lt: level } }, { $max: { level } }, { new: false },

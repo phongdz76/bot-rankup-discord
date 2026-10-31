@@ -59,5 +59,6 @@ export function getDefaultGuildConfig(guildId) {
       voice: { rewardPerMinute: 2, minChannelMembers: 2 },
     },
     excludedChannels: [], excludedRoles: [], revision: 0,
+    gameRoles: { enabled: false, mode: 'multiple', roles: [] },
   };
 }

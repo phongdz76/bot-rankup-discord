@@ -47,7 +47,7 @@ export async function processAllVoiceChannels(client, now = Date.now()) {
         seen.add(key);
         const checkpoint = eligibleSince.get(key);
         if (checkpoint && now - checkpoint.since >= 60000) {
-          await awardXp(member, settings, { source: 'voice', xp: settings.xpSettings.voice.rewardPerMinute });
+          await awardXp(member, settings, { source: 'voice', xp: settings.xpSettings.voice.rewardPerMinute, now: new Date(now) });
           checkpoint.since = now;
         }
       }

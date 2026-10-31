@@ -21,7 +21,9 @@ export async function execute(interaction) {
   const embed = new EmbedBuilder().setColor(config.theme.color).setTitle('Hutao-Chan • Hướng dẫn')
     .setDescription([
       `${mention('rank')} [user] — Cấp độ, thứ hạng và thanh tiến độ XP.`,
-      `${mention('leaderboard')} — Bảng xếp hạng, 10 người mỗi trang. Chọn page để xem trang khác.`,
+      `${mention('profile')} [user] — Hồ sơ, huy hiệu và tiến độ thành tựu.`,
+      `${mention('leaderboard')} — BXH tổng/tuần/tháng. Chọn period, page; season để xem mùa cũ.`,
+      `${mention('games')} — Tự chọn hoặc gỡ role game.`,
       `${mention('setup')} — Cấu hình server (cần quyền Quản lý Server).`,
       `${mention('help')} — Xem hướng dẫn này.`,
       '',

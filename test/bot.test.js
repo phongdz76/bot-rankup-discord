@@ -28,6 +28,8 @@ import * as leaderboardCommand from '../src/commands/leaderboard.js';
 import * as helpCommand from '../src/commands/help.js';
 import { describeAuthFailure } from '../src/dashboard/authFailure.js';
 import { createSessionStore } from '../src/dashboard/sessionStore.js';
+import { Season } from '../src/models/Season.js';
+import { periodAt } from '../src/services/seasons.js';
 
 const require = createRequire(import.meta.url);
 const { OAuth2 } = require(createRequire(require.resolve('passport-oauth2')).resolve('oauth'));
@@ -45,7 +47,7 @@ before(async () => {
   await Promise.all([User.init(), GuildConfig.init()]);
 });
 after(async () => { stopVoiceXpTracker(); await mongoose.disconnect(); await mongo?.stop(); });
-beforeEach(async () => { stopVoiceXpTracker(); invalidateRoleSync(); await Promise.all([User.deleteMany({}), GuildConfig.deleteMany({})]); });
+beforeEach(async () => { stopVoiceXpTracker(); invalidateRoleSync(); await Promise.all([User.deleteMany({}), GuildConfig.deleteMany({}), Season.deleteMany({})]); });
 
 function fixture(id = guildId) {
   const sent = [];
@@ -551,6 +553,9 @@ test('dashboard enforces authentication, fresh guild permission, CSRF, revisions
   member.permissions = new PermissionsBitField([]);
   await request(app).get(board).set('Cookie', cookie).expect(403);
   await request(app).get(url).set('Cookie', cookie).expect(403);
+  await request(app).get(`/api/guilds/${guildId}/achievements`).set('Cookie', cookie).expect(403);
+  await request(app).get(`/api/guilds/${guildId}/seasons`).set('Cookie', cookie).expect(403);
+  await request(app).post(`/api/guilds/${guildId}/game-roles/panel`).set('Cookie', cookie).expect(403);
   member.permissions = new PermissionsBitField([PermissionFlagsBits.ManageGuild]);
   const login = await request(app).get('/auth/discord').expect(302);
   const authorization = new URL(login.headers.location);
@@ -681,6 +686,7 @@ const browserExecutable = [process.env.BROWSER_EXECUTABLE,
 
 test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard and reset', { skip: !browserExecutable }, async () => {
   const { client, guild, member } = fixture();
+  guild.roles.cache.get(role2Id).permissions = new PermissionsBitField();
   const members = new Collection([[member.id, member], ...Array.from({ length: 37 }, (_, index) => {
     const id = String(700000000000000000n + BigInt(index));
     return [id, { ...member, id, displayName: `Member ${index}` }];
@@ -767,6 +773,26 @@ test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard an
     await page.locator('#save-settings').click();
     await page.waitForFunction(() => document.querySelector('#save-status').textContent.includes('Tất cả thay đổi'));
     assert.equal((await getGuildConfig(guildId)).roleRewards[0].roleId, roleId);
+    await page.locator('[data-tab="achievements"]').click();
+    await page.locator('#achievement-catalog article').last().waitFor();
+    assert.equal(await page.locator('#achievement-catalog article').count(), 9);
+    assert.match(await page.locator('#achievement-catalog').textContent(), /Cú đêm/);
+    await capture('achievements-mobile');
+    await page.locator('[data-tab="games"]').click();
+    await page.locator('[name="gameRoles.enabled"]').check();
+    await page.locator('#add-game-role').click();
+    await page.locator('[data-game-label]').fill('Genshin Impact');
+    await page.locator('[data-game-role]').selectOption(role2Id);
+    await page.locator('#save-settings').click();
+    await page.waitForFunction(() => document.querySelector('#save-status').textContent.includes('Tất cả thay đổi'));
+    assert.equal((await getGuildConfig(guildId)).gameRoles.roles[0].roleId, role2Id);
+    await capture('game-roles-mobile');
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await capture('game-roles-desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('#game-panel-channel').selectOption(channelId);
+    assert.match(await page.locator('#save-status').textContent(), /Tất cả thay đổi/);
     await User.create({ userId, guildId, xp: 5000, level: 5 });
     await page.locator('[data-tab="leaderboard"]').click();
     await page.locator('#leaderboard tbody tr').first().waitFor();
@@ -811,6 +837,22 @@ test('browser: desktop/mobile layout, tabs, preview, save, roles, leaderboard an
     await page.waitForFunction(() => document.querySelector('#leaderboard').getAttribute('aria-busy') === 'false');
     assert.equal(await page.locator('#leaderboard tbody tr td').first().textContent(), '#11');
     assert.equal(memberScans, 1);
+    const month = periodAt('month');
+    await User.updateOne({ guildId, userId }, { $set: { [`periodScores.${month.key}`]: { xp: 42, messageCount: 2, displayName: 'Người dẫn đầu mùa' } } });
+    const oldDate = new Date(month.startsAt.getTime() - 86400000);
+    const oldMonth = periodAt('month', oldDate);
+    await User.updateOne({ guildId, userId }, { $set: { [`periodScores.${oldMonth.key}`]: { xp: 15, displayName: 'Quán quân mùa trước' } } });
+    await Season.create({ guildId, ...oldMonth, closedAt: new Date(), memberCount: 1, winners: [{ userId, username: 'Quán quân mùa trước', xp: 15, rank: 1 }] });
+    await page.locator('#leaderboard-period').selectOption('month');
+    await page.waitForFunction(() => document.querySelector('#leaderboard').textContent.includes('Người dẫn đầu mùa'));
+    assert.equal(await page.locator('#leaderboard thead th').count(), 3);
+    await page.locator('#leaderboard-season').selectOption(oldMonth.date);
+    await page.waitForFunction(() => document.querySelector('#leaderboard').textContent.includes('Quán quân mùa trước'));
+    assert.match(await page.locator('#leaderboard').textContent(), /Đã chốt/);
+    await capture('season-history-mobile');
+    await page.locator('#leaderboard-period').selectOption('all');
+    await page.waitForFunction(() => document.querySelector('#leaderboard thead')?.textContent.includes('Level'));
+    assert.match(await page.locator('#save-status').textContent(), /Tất cả thay đổi/);
     if (process.env.CAPTURE_UI === '1') await page.locator('#panel-leaderboard').screenshot({ path: '.cache/qa/leaderboard-pagination-mobile.png' });
     await page.locator('[data-tab="advanced"]').click();
     await page.locator('[data-choice-list="excludedChannels"] input[type="checkbox"]').first().check();

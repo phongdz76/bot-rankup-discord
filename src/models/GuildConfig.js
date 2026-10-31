@@ -37,6 +37,10 @@ const guildConfigSchema = new mongoose.Schema({
     },
   },
   excludedChannels: [String], excludedRoles: [String],
+  gameRoles: {
+    enabled: { type: Boolean, default: false }, mode: { type: String, enum: ['multiple', 'single'], default: 'multiple' },
+    roles: [{ _id: false, roleId: { type: String, required: true }, label: { type: String, required: true, maxlength: 80 } }],
+  },
   revision: { type: Number, default: 0 },
 }, { timestamps: true });
 

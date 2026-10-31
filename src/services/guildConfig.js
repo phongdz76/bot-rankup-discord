@@ -1,6 +1,7 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { getDefaultGuildConfig } from '../config/index.js';
 import { GuildConfig } from '../models/GuildConfig.js';
+import { gameRoleDefaults, validateGameRoleResources } from './gameRoles.js';
 
 export class SettingsError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -57,9 +58,22 @@ export function validateSettings(input, guildId) {
     assert(Array.isArray(input[key]) && input[key].length <= 500 && input[key].every(id => typeof id === 'string' && idPattern.test(id)), `${key}: danh sách ID không hợp lệ.`);
     excluded[key] = [...new Set(input[key])];
   }
+  const games = input.gameRoles || gameRoleDefaults();
+  assert(typeof games.enabled === 'boolean' && ['single', 'multiple'].includes(games.mode), 'Cấu hình role game không hợp lệ.');
+  assert(Array.isArray(games.roles) && games.roles.length <= 25, 'Tối đa 25 role game trong một bảng chọn.');
+  const gameIds = new Set();
+  const gameRoles = { enabled: games.enabled, mode: games.mode, roles: games.roles.map(item => {
+    assert(item && typeof item.roleId === 'string' && idPattern.test(item.roleId), 'Role game không hợp lệ.');
+    assert(!gameIds.has(item.roleId), 'Mỗi role game chỉ được xuất hiện một lần.');
+    assert(typeof item.label === 'string' && item.label.trim().length > 0 && item.label.trim().length <= 80, 'Tên game phải có 1–80 ký tự.');
+    assert(!roles.has(item.roleId) && !(input.roleBaselines || []).some(role => role.roleId === item.roleId), 'Role game không được trùng role cấp bậc.');
+    gameIds.add(item.roleId);
+    return { roleId: item.roleId, label: item.label.trim() };
+  }) };
+  assert(!gameRoles.enabled || gameRoles.roles.length > 0, 'Thêm ít nhất một role game trước khi bật.');
   return {
     guildId, levelMode: input.levelMode, levelUpChannelId: input.levelUpChannelId,
-    roleRewards, ...messages, ...excluded,
+    roleRewards, gameRoles, ...messages, ...excluded,
     xpSettings: {
       chat: { min: chat.min, max: chat.max, cooldownSeconds: chat.cooldownSeconds },
       voice: { rewardPerMinute: voice.rewardPerMinute, minChannelMembers: voice.minChannelMembers },
@@ -90,6 +104,7 @@ export async function validateGuildResources(guild, settings) {
     assert(me.permissions.has(PermissionFlagsBits.ManageRoles), 'Bot cần quyền Quản lý vai trò.');
     reward.roleName = role.name;
   }
+  await validateGameRoleResources(guild, settings, me);
 }
 
 export async function saveGuildConfig(guild, input, revision, { signal } = {}) {

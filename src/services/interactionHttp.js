@@ -1,7 +1,8 @@
 import { createPublicKey, verify } from 'node:crypto';
 import express from 'express';
-import { ChatInputCommandInteraction, MessageFlags, MessagePayload } from 'discord.js';
+import { ChatInputCommandInteraction, StringSelectMenuInteraction, MessageFlags, MessagePayload } from 'discord.js';
 import { getErrorDiagnostics } from '../utils/errors.js';
+import { handleGameRoleInteraction } from './gameRoles.js';
 
 const errorMessage = 'Chưa thể xử lý lệnh này. Hãy thử lại sau.';
 const message = content => ({ type: 4, data: { content, flags: MessageFlags.Ephemeral, allowed_mentions: { parse: [] } } });
@@ -58,6 +59,16 @@ class InlineInteraction extends ChatInputCommandInteraction {
   }
 }
 
+class InlineGameSelection extends StringSelectMenuInteraction {
+  constructor(client, payload, deliver, signal) {
+    super(client, { ...payload, entitlements: payload.entitlements || [], authorizing_integration_owners: payload.authorizing_integration_owners || {} });
+    this.transport = 'http'; this.signal = signal; this.deliver = deliver;
+  }
+}
+for (const method of ['deferReply', 'reply', 'editReply', 'sendInline']) {
+  InlineGameSelection.prototype[method] = InlineInteraction.prototype[method];
+}
+
 export function interactionHttpRoutes({ client, settings, now = Date.now, deadlineMs = 2200, log = console.log }) {
   const router = express.Router();
   const publicKey = /^[a-f0-9]{64}$/i.test(settings.interactionsPublicKey || '')
@@ -83,7 +94,11 @@ export function interactionHttpRoutes({ client, settings, now = Date.now, deadli
     catch { return res.sendStatus(400); }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return res.sendStatus(400);
     if (payload.type === 1) return res.json({ type: 1 });
-    if (payload.type !== 2 || payload.data?.type !== 1 || payload.application_id !== settings.clientId ||
+    const isCommand = payload.type === 2 && payload.data?.type === 1;
+    const isGameSelection = payload.type === 3 && payload.data?.component_type === 3 &&
+      /^games:[a-f0-9]{12}$/.test(payload.data?.custom_id || '') && Array.isArray(payload.data?.values) &&
+      payload.message?.author?.id === settings.clientId && payload.guild_id && payload.member?.user;
+    if ((!isCommand && !isGameSelection) || payload.application_id !== settings.clientId ||
       !/^\d{17,20}$/.test(payload.id || '') || !payload.token || !(payload.user || payload.member?.user)) {
       return res.sendStatus(400);
     }
@@ -97,8 +112,8 @@ export function interactionHttpRoutes({ client, settings, now = Date.now, deadli
       responses.set(payload.id, cached);
       const controller = new AbortController();
       let settled = false;
-      const command = client.commands?.get(payload.data.name);
-      const commandName = command ? payload.data.name : 'unknown';
+      const command = isGameSelection ? { execute: handleGameRoleInteraction } : client.commands?.get(payload.data.name);
+      const commandName = isGameSelection ? 'games' : command ? payload.data.name : 'unknown';
       const finish = (encoded, outcome) => {
         if (settled) return;
         settled = true;
@@ -111,10 +126,12 @@ export function interactionHttpRoutes({ client, settings, now = Date.now, deadli
       const fail = (content, outcome) => finish({ body: JSON.stringify(message(content)), contentType: 'application/json' }, outcome);
       const timeout = setTimeout(() => fail(commandName === 'setup'
         ? 'Chưa xác nhận được kết quả cấu hình. Kiểm tra /setup view trước khi gửi lại yêu cầu.'
-        : 'Chưa tải xong dữ liệu. Hãy thử lại sau ít giây.', 'deadline'), deadlineMs);
+        : isGameSelection ? 'Chưa xác nhận được cập nhật role. Mở /games để kiểm tra trạng thái trước khi chọn lại.'
+          : 'Chưa tải xong dữ liệu. Hãy thử lại sau ít giây.', 'deadline'), deadlineMs);
       void (async () => {
         if (!command) return fail('Lệnh chưa được hỗ trợ. Dùng /help để xem hướng dẫn.', 'unknown_command');
-        const interaction = new InlineInteraction(client, payload, encoded => finish(encoded, 'completed'), controller.signal);
+        const Interaction = isGameSelection ? InlineGameSelection : InlineInteraction;
+        const interaction = new Interaction(client, payload, encoded => finish(encoded, 'completed'), controller.signal);
         await command.execute(interaction);
         if (!settled) fail(errorMessage, 'no_reply');
       })().catch(error => {

@@ -20,6 +20,9 @@ import * as rankCommand from '../commands/rank.js';
 import * as leaderboardCommand from '../commands/leaderboard.js';
 import * as helpCommand from '../commands/help.js';
 import * as setupCommand from '../commands/setup.js';
+import * as profileCommand from '../commands/profile.js';
+import * as gamesCommand from '../commands/games.js';
+import { handleGameRoleInteraction } from './gameRoles.js';
 
 export const client = new Client({
   // Callback hết hạn nhanh: không xếp lại vào hàng đợi khi đã nhận 429.
@@ -48,6 +51,8 @@ client.commands.set(rankCommand.data.name, rankCommand);
 client.commands.set(leaderboardCommand.data.name, leaderboardCommand);
 client.commands.set(helpCommand.data.name, helpCommand);
 client.commands.set(setupCommand.data.name, setupCommand);
+client.commands.set(profileCommand.data.name, profileCommand);
+client.commands.set(gamesCommand.data.name, gamesCommand);
 
 /**
  * Đăng ký Slash Commands với Discord API
@@ -59,12 +64,7 @@ export async function registerSlashCommands(rest = client.rest) {
   }
 
   rest.setToken(config.token);
-  const commandsBody = [
-    rankCommand.data.toJSON(),
-    leaderboardCommand.data.toJSON(),
-    helpCommand.data.toJSON(),
-    setupCommand.data.toJSON()
-  ];
+  const commandsBody = [...client.commands.values()].map(command => command.data.toJSON());
 
   try {
     console.log('[Discord] [INFO] Dang dang ky Slash Commands Global...');
@@ -118,6 +118,10 @@ export async function initDiscordClient() {
 
   // Sự kiện tương tác Slash Command
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('games:')) {
+      await handleGameRoleInteraction(interaction).catch(error => console.error('[GameRoles]', JSON.stringify(getErrorDiagnostics(error))));
+      return;
+    }
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);

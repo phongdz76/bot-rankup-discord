@@ -8,7 +8,7 @@ Bot Discord đa server, viết bằng Node.js ES Modules, discord.js v14 và Mon
 - Voice thưởng **2 XP/phút hợp lệ**, tối thiểu 2 người hợp lệ; bỏ qua bot, kênh AFK, người tắt/bị tắt mic hoặc tai nghe, người bị loại trừ và người không được nói trên sân khấu.
 - Hai chế độ: **Role Mapping** giữ role thưởng cao nhất; **Unlimited** tích lũy role đã đạt. Cả hai đều tiếp tục tăng level sau mốc cuối.
 - Welcome/goodbye tùy chỉnh kênh, nội dung, embed hoặc văn bản; biến `{user}`, `{username}`, `{server}`, `{memberCount}`.
-- `/rank [user]` hiển thị cấp độ, thứ hạng và thanh XP màu bằng chữ, `/leaderboard [page]` phân trang 10 người/trang, `/help` hướng dẫn và `/setup` quản trị.
+- `/rank [user]` hiển thị cấp độ, thứ hạng và thanh XP màu bằng chữ; `/profile [user]` xem thành tựu/huy hiệu; `/leaderboard` xem tổng/tuần/tháng và lịch sử mùa, 10 người/trang; `/games` tự chọn role game; `/help` hướng dẫn và `/setup` quản trị.
 - Dashboard: đăng nhập Discord, chọn server có quyền quản lý, cấu hình XP/role/kênh/loại trừ, xem trước lời chào và leaderboard.
 - Mỗi server có dữ liệu XP và cấu hình riêng. Cấu hình từ dashboard và `/setup` dùng chung một lớp kiểm tra.
 - Session lưu MongoDB, mã hóa dữ liệu session, OAuth state, cookie HttpOnly/SameSite, CSRF, giới hạn tần suất và kiểm tra lại quyền quản lý khi truy cập server.
@@ -84,8 +84,13 @@ Chế độ này không có cache server của bot nên không dùng để kiể
 ```text
 /rank
 /rank user:@thanhvien
+/profile
+/profile user:@thanhvien
 /leaderboard
 /leaderboard page:2
+/leaderboard period:week
+/leaderboard period:month season:2026-11-01
+/games
 /help
 
 /setup welcome enabled:True channel:#chao-mung message:Chào {user}!
@@ -105,7 +110,17 @@ Chế độ này không có cache server của bot nên không dùng để kiể
 /setup dashboard
 ```
 
-`/setup` cần quyền **Quản lý Server**. `/rank`, `/leaderboard` và `/setup` chỉ dùng trong server; `/help` dùng được trong DM. Lệnh global đăng ký khi bot kết nối, có thể cần tải lại Discord để thấy thay đổi.
+`/setup` cần quyền **Quản lý Server**. `/rank`, `/profile`, `/leaderboard`, `/games` và `/setup` chỉ dùng trong server; `/help` dùng được trong DM. Lệnh global đăng ký khi bot kết nối, có thể cần tải lại Discord để thấy thay đổi.
+
+### Thành tựu, mùa và role game
+
+`/profile` có 9 huy hiệu: hoạt động đầu tiên, 100/1.000 lượt chat hợp lệ, 3 đêm hoạt động (22h–02h), 10/50/100 giờ voice, quán quân tuần và quán quân tháng. Chat trong cooldown và voice không hợp lệ không được tính. 00h–02h thuộc cùng đêm với 22h ngày trước. Mốc chat/voice cũ được mở khi xem hồ sơ hoặc có hoạt động mới; không dựng lại đêm/mùa trước khi tính năng được triển khai. Huy hiệu mở một lần, lưu thời điểm và giữ qua các mùa, riêng từng server.
+
+BXH tuần bắt đầu thứ Hai 00h, BXH tháng bắt đầu ngày 1 00h, múi giờ `Asia/Ho_Chi_Minh`. Điểm mùa và XP tổng/cooldown cập nhật nguyên tử trong cùng hồ sơ MongoDB; XP do quy đổi role không tính vào mùa. Điểm các mùa được giữ trong `User.periodScores`, gồm tên hiển thị tại lúc ghi nhận; không xóa kết quả của người đã rời server. Chốt mùa sau khoảng đệm 5 phút (quét mỗi phút): lưu top 10/số người tham gia trong collection `seasons` và mở huy hiệu quán quân nếu người đứng đầu có XP > 0. Bằng điểm thì user ID tăng dần để ổn định thứ hạng. Khởi động lại sẽ chốt bù mùa đã kết thúc ngay cả khi Gateway chưa kết nối. Mùa mới tự bắt đầu từ 0; không reset XP tổng. Dashboard liệt kê 24 mùa đã chốt gần nhất; slash command nhận ngày để xem mùa cũ hơn.
+
+Trong dashboard → **Role game**, bật tính năng, chọn một/nhiều game và khai báo tối đa 25 cặp tên game/role. Sau khi lưu, `/games` mở menu cá nhân; **Đăng bảng chọn game** tạo menu chung ở kênh được chọn. Menu không cần collector trong RAM nên dùng được qua restart. Thay đổi cấu hình game làm menu cũ hết hiệu lực, cần mở `/games` hoặc đăng lại. Chỉ role nằm dưới bot, không tích hợp, không có quyền quản trị/điều hành và không trùng role cấp bậc được phép dùng. Lúc chọn, bot kiểm tra lại role/member và chỉ PUT/DELETE từng role được cấu hình; giữ các role khác. Xóa game/tắt tính năng không tự gỡ role đã nhận.
+
+Áp dụng role/đăng menu vẫn cần Discord REST. Request game không tự retry 429, tuân theo thời gian chờ và không ghi token/body vào log `[GameRoles]`. Nếu hết hạn phản hồi hoặc cập nhật một phần, mở `/games` để xem lại trạng thái trước khi chọn lại. Tương tác trùng ID trong cùng tiến trình dùng chung kết quả; thao tác thêm/gỡ từng role là idempotent. Không tự tạo/cấp role quản trị hoặc role thưởng mùa.
 
 Có thể đồng bộ lệnh mà không mở thêm kết nối bot bằng `npm run register`. `/help` dùng liên kết slash command bấm được khi lấy được command ID từ Discord. Trong Developer Portal → Installation, Guild Install cần scopes `bot` + `applications.commands`; User Install chỉ cần `applications.commands`.
 
@@ -129,6 +144,8 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 - `POST /api/guilds/:id/settings`: body `{ settings, revision }`, header `x-csrf-token`.
 - `POST /api/guilds/:id/reset`: body `{ confirm: true, revision }`, yêu cầu CSRF.
 - `GET /api/guilds/:id/leaderboard?page=1`: 10 người/trang, trả `entries`, `memberCount`, `page`, `pageSize`, `totalPages`; yêu cầu quyền quản lý. Trang vượt cuối được đưa về trang cuối, trang không phải số nguyên dương nhận HTTP 400.
+- BXH nhận thêm `period=week|month` và `season=YYYY-MM-DD`; `GET /api/guilds/:id/seasons?period=week|month` trả lịch sử mùa. `GET /api/guilds/:id/achievements` trả danh mục và số thành viên đã mở huy hiệu. Các API này dùng cùng kiểm tra quyền quản lý server.
+- `POST /api/guilds/:id/game-roles/panel` nhận `{ channelId }`, cần phiên đăng nhập, quyền quản lý, CSRF và quyền gửi tin tại kênh đích. Cấu hình game lưu chung qua API settings có kiểm tra revision.
 - `GET /health`: HTTP 200 khi MongoDB và Discord Gateway đã kết nối, 503 nếu một trong hai chưa sẵn sàng. `discord: true` không kiểm chứng việc gửi HTTP callback hoặc đổi token OAuth; các yêu cầu đó vẫn có thể bị Discord trả 429.
 
 Trong chế độ `BOT_ENABLED=false`, `/health` chỉ yêu cầu MongoDB, đồng thời trả rõ `botEnabled: false` và `discord: false`. Trên Render, `revision` chứa 7 ký tự đầu commit đang chạy để xác nhận deploy.
@@ -147,7 +164,7 @@ node scripts/configure-interactions.js --endpoint=https://ten-service.onrender.c
 
 Script kiểm tra danh tính bot và yêu cầu endpoint từ chối chữ ký thiếu trước khi cập nhật URL; Discord tự gửi PING/chữ ký kiểm tra để xác thực endpoint. Để khôi phục nhận lệnh qua Gateway: `node scripts/configure-interactions.js --disable`. Chỉ một phương thức nhận slash command hoạt động tại một thời điểm. Không dùng token tài khoản Discord cá nhân.
 
-Endpoint xác thực Ed25519 trên raw body, timestamp tối đa 5 phút cũ/30 giây tương lai, application ID và giới hạn kích thước. Các lượt giao trùng ID dùng lại cùng kết quả trong bộ nhớ của tiến trình. `/help`, `/rank`, `/leaderboard` đọc MongoDB và dữ liệu đã đồng bộ để trả lời mà không chờ REST. `/rank` dùng dữ liệu thành viên từ payload đã ký/cache nếu có; khi Gateway chưa kết nối sẽ dùng hồ sơ MongoDB. Role và thành viên mới được cập nhật qua Gateway/đợt đồng bộ sau đó, không quét toàn bộ server ở mỗi lệnh HTTP.
+Endpoint xác thực Ed25519 trên raw body, timestamp tối đa 5 phút cũ/30 giây tương lai, application ID và giới hạn kích thước. Các lượt giao trùng ID dùng lại cùng kết quả trong bộ nhớ của tiến trình. `/help`, `/rank`, `/profile`, `/leaderboard` và menu `/games` đọc MongoDB/dữ liệu đã đồng bộ để trả lời mà không chờ REST; lựa chọn game có gọi REST để thay role. Endpoint nhận cả string select menu `games:*` trong guild, kiểm tra tác giả message là bot và trả kết quả riêng tư. `/rank` dùng dữ liệu thành viên từ payload đã ký/cache nếu có; khi Gateway chưa kết nối sẽ dùng hồ sơ MongoDB. Role và thành viên mới được cập nhật qua Gateway/đợt đồng bộ sau đó, không quét toàn bộ server ở mỗi lệnh HTTP.
 
 Tác vụ quá 2,2 giây nhận thông báo chưa có kết quả trong HTTP response; không gửi callback/followup trễ. Với `/setup`, kiểm tra lại `/setup view` trước khi gửi lại; thao tác lưu dừng trước bước ghi nếu thời hạn đã hết trong lúc kiểm tra quyền/tài nguyên. `/setup view` vẫn trả file JSON riêng tư qua multipart. `interactionsHttp.lastResponse` trên `/health` và log `[Discord HTTP] RESPONSE` ghi kết quả phản hồi HTTP, tách biệt với `discordHttp` (yêu cầu REST ra ngoài).
 

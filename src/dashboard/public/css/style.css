@@ -1639,6 +1639,17 @@ a.button:focus, a.button:focus-visible,
 }
 
 /* Support notes stay in the reading flow rather than another boxed card. */
+.game-role-row { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 16px; margin: 20px 0; }
+.game-role-row label { min-width: 0; }
+.game-panel-publish { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
+.achievement-list article { padding: 20px 0; border-bottom: 1px solid var(--line); }
+.achievement-list h3 { margin: 0 0 8px; }
+.achievement-list p { margin: 0 0 8px; }
+.leaderboard-filters { margin-bottom: 24px; }
+@media (max-width: 768px) {
+  .game-role-row { grid-template-columns: 1fr; gap: 12px; }
+  .game-role-row .remove-role { justify-self: start; }
+}
 .help-tip { display: flex; gap: 18px; align-items: flex-start; margin: 30px 0; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .help-tip-icon { display: grid; place-items: center; width: 28px; height: 28px; margin-top: 4px; flex: 0 0 28px; border: 1px solid #8b6a76; border-radius: 50%; color: #dec6d0; font-size: 16px; }
 .help-tip > div { min-width: 0; }

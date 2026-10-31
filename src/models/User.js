@@ -37,6 +37,13 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    achievements: { type: Map, of: Date, default: () => ({}) },
+    nightDates: { type: [String], default: [] },
+    // Cùng document với XP: cooldown, XP tổng và điểm mùa cập nhật nguyên tử.
+    periodScores: { type: Map, of: new mongoose.Schema({
+      xp: { type: Number, default: 0 }, messageCount: { type: Number, default: 0 },
+      totalVoiceMinutes: { type: Number, default: 0 }, displayName: String,
+    }, { _id: false }), default: () => ({}) },
     lastMessageAt: {
       type: Date,
       default: null

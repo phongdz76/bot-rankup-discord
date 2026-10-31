@@ -5,7 +5,7 @@ import express from 'express';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { Client, Collection, PermissionFlagsBits } from 'discord.js';
+import { Client, Collection, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 import { config, getDefaultGuildConfig } from '../src/config/index.js';
 import { createWebApp } from '../src/server.js';
 import { interactionHttpRoutes } from '../src/services/interactionHttp.js';
@@ -16,6 +16,9 @@ import * as help from '../src/commands/help.js';
 import * as rank from '../src/commands/rank.js';
 import * as leaderboard from '../src/commands/leaderboard.js';
 import * as setup from '../src/commands/setup.js';
+import * as profile from '../src/commands/profile.js';
+import * as games from '../src/commands/games.js';
+import { gameRoleSignature } from '../src/services/gameRoles.js';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const publicHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
@@ -38,7 +41,7 @@ function fixture() {
     outbound++;
     throw new Error('Outbound REST must not be used by inline reads');
   } } });
-  client.commands = new Collection([help, rank, leaderboard, setup].map(command => [command.data.name, command]));
+  client.commands = new Collection([help, rank, leaderboard, setup, profile, games].map(command => [command.data.name, command]));
   clients.push(client);
   return { client, app: createWebApp({ client, settings }) };
 }
@@ -79,7 +82,7 @@ test('help, rank, leaderboard and private configuration reads reply inline while
   assert.equal(client.isReady(), false);
   await User.create({ guildId, userId, xp: 5000, level: 5, inGuild: true, displayName: 'Test User' });
   for (const [name, options, title] of [
-    ['help', [], 'Hướng dẫn'], ['rank', [], null], ['leaderboard', [], 'Bảng xếp hạng'],
+    ['help', [], 'Hướng dẫn'], ['rank', [], null], ['leaderboard', [], 'Bảng xếp hạng'], ['profile', [], 'Hồ sơ'],
   ]) {
     const response = await signed(app, command(name, options)).expect(200);
     assert.equal(response.body.type, 4);
@@ -109,6 +112,68 @@ test('help, rank, leaderboard and private configuration reads reply inline while
   assert.equal(health.body.interactionsHttp.enabled, true);
   assert.equal(health.body.interactionsHttp.lastResponse.outcome, 'completed');
   assert.equal(outbound, 0);
+});
+
+test('games command and signed select menus reply inline and duplicate deliveries change roles once', async t => {
+  const { app, client } = fixture();
+  const roleId = '777777777777777777', botRoleId = '888888888888888888';
+  const saved = getDefaultGuildConfig(guildId);
+  saved.gameRoles = { enabled: true, mode: 'multiple', roles: [{ roleId, label: 'Genshin' }] };
+  await GuildConfig.create(saved);
+  const menu = await signed(app, command('games')).expect(200);
+  assert.equal(menu.body.data.flags, 64);
+  assert.equal(menu.body.data.components[0].components[0].custom_id, `games:${gameRoleSignature(saved)}`);
+  client.user = client.users._add({ id: appId, username: 'Hutao', discriminator: '0', bot: true });
+  client.token = 'private-bot-token';
+  const guild = client.guilds._add({ id: guildId, name: 'Test', owner_id: '999999999999999999', roles: [
+    { id: guildId, name: '@everyone', permissions: '0', position: 0 },
+    { id: roleId, name: 'Genshin', permissions: '0', position: 1 },
+    { id: botRoleId, name: 'Bot', permissions: PermissionFlagsBits.ManageRoles.toString(), position: 10 },
+  ] });
+  guild.members._add({ user: { id: appId, username: 'Hutao', discriminator: '0', bot: true }, roles: [botRoleId], joined_at: new Date().toISOString() });
+  const member = guild.members._add({ user: { id: userId, username: 'Test User', discriminator: '0' }, roles: [], joined_at: new Date().toISOString() });
+  t.mock.method(client, 'isReady', () => true);
+  t.mock.method(guild.roles, 'fetch', async () => guild.roles.cache);
+  t.mock.method(guild.members, 'fetchMe', async () => guild.members.me);
+  t.mock.method(guild.members, 'fetch', async () => member);
+  let writes = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    writes++; assert(url.endsWith(`/members/${userId}/roles/${roleId}`)); assert.equal(options.method, 'PUT');
+    return new Response(null, { status: 204 });
+  });
+  const payload = { ...command('games'), type: 3, data: { component_type: 3, custom_id: `games:${gameRoleSignature(saved)}`, values: [roleId] },
+    message: { id: '999999999999999998', channel_id: '555555555555555555', author: { id: appId, username: 'Hutao', discriminator: '0', bot: true },
+      content: 'Chọn game', timestamp: new Date().toISOString(), type: 0, attachments: [], embeds: [], components: [], mentions: [], mention_roles: [] } };
+  const responses = await Promise.all([signed(app, payload).expect(200), signed(app, payload).expect(200)]);
+  assert.equal(responses[0].body.type, 4); assert.equal(responses[0].body.data.flags, 64);
+  assert(responses[0].body.data.content.includes('Đã cập nhật'));
+  assert.deepEqual(responses[0].body, responses[1].body); assert.equal(writes, 1);
+  assert.equal(outbound, 0);
+  await signed(app, { ...payload, id: String(++counter), message: { ...payload.message, author: { id: userId } } }).expect(400);
+});
+
+test('signed game menu deadline aborts before any role mutation when preflight is slow', async t => {
+  const { client } = fixture();
+  const roleId = '777777777777777777';
+  const saved = getDefaultGuildConfig(guildId); saved.gameRoles = { enabled: true, mode: 'multiple', roles: [{ roleId, label: 'Game' }] };
+  await GuildConfig.create(saved);
+  client.user = client.users._add({ id: appId, username: 'Hutao', discriminator: '0', bot: true });
+  const guild = client.guilds._add({ id: guildId, name: 'Test', roles: [] });
+  guild.roles.cache.set(roleId, { id: roleId, editable: true, managed: false, permissions: new PermissionsBitField() });
+  t.mock.method(client, 'isReady', () => true);
+  let release;
+  t.mock.method(guild.roles, 'fetch', () => new Promise(resolve => { release = resolve; }));
+  t.mock.method(guild.members, 'fetchMe', async () => ({ permissions: { has: () => true } }));
+  t.mock.method(guild.members, 'fetch', async () => ({ id: userId, roles: { cache: new Collection() } }));
+  let writes = 0; t.mock.method(globalThis, 'fetch', async () => { writes++; return new Response(null, { status: 204 }); });
+  const app = express(); app.use('/discord/interactions', interactionHttpRoutes({ client, settings, deadlineMs: 30, log: () => {} }));
+  const payload = { ...command('games'), type: 3, data: { component_type: 3, custom_id: `games:${gameRoleSignature(saved)}`, values: [roleId] },
+    message: { id: '999999999999999998', channel_id: '555555555555555555', author: { id: appId, username: 'Hutao', discriminator: '0', bot: true },
+      content: '', timestamp: new Date().toISOString(), type: 0, attachments: [], embeds: [], components: [], mentions: [], mention_roles: [] } };
+  const response = await signed(app, payload).expect(200);
+  assert(response.body.data.content.includes('Mở /games'));
+  release(); await new Promise(resolve => setTimeout(resolve, 40));
+  assert.equal(writes, 0);
 });
 
 test('duplicate signed commands share the same result and execute side effects once', async () => {

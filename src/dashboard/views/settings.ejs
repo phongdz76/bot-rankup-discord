@@ -8,6 +8,8 @@
       <button type="button" id="tab-welcome" role="tab" aria-controls="panel-welcome" aria-selected="true" data-tab="welcome">✿ Chào đón & Tạm biệt</button>
       <button type="button" id="tab-level" role="tab" aria-controls="panel-level" aria-selected="false" tabindex="-1" data-tab="level">✧ Cấp độ & Điểm</button>
       <button type="button" id="tab-roles" role="tab" aria-controls="panel-roles" aria-selected="false" tabindex="-1" data-tab="roles">◇ Phần thưởng vai trò</button>
+      <button type="button" id="tab-achievements" role="tab" aria-controls="panel-achievements" aria-selected="false" tabindex="-1" data-tab="achievements">🏅 Thành tựu & Huy hiệu</button>
+      <button type="button" id="tab-games" role="tab" aria-controls="panel-games" aria-selected="false" tabindex="-1" data-tab="games">🎮 Role game</button>
       <button type="button" id="tab-channels" role="tab" aria-controls="panel-channels" aria-selected="false" tabindex="-1" data-tab="channels"># Kênh thông báo</button>
       <button type="button" id="tab-leaderboard" role="tab" aria-controls="panel-leaderboard" aria-selected="false" tabindex="-1" data-tab="leaderboard">↗ Bảng xếp hạng</button>
       <button type="button" id="tab-advanced" role="tab" aria-controls="panel-advanced" aria-selected="false" tabindex="-1" data-tab="advanced">⌘ Tùy chọn khác</button>
@@ -50,8 +52,29 @@
       <section class="panel tab-panel" id="panel-channels" role="tabpanel" aria-labelledby="tab-channels" hidden>
         <p class="eyebrow">Những tin vui của máy chủ</p><h2>Kênh thông báo</h2><label>Gửi lời chúc mừng lên cấp tại<select name="levelUpChannelId" data-channel="text"><option value="">Kênh trò chuyện mà thành viên vừa nhắn</option></select></label><p class="field-help">Chọn một kênh riêng nếu bạn muốn thông báo cả những lần lên cấp nhờ phòng thoại. Kênh chào mừng và tạm biệt được chọn ở mục Chào đón & Tạm biệt.</p>
       </section>
+      <section class="panel tab-panel" id="panel-achievements" role="tabpanel" aria-labelledby="tab-achievements" hidden>
+        <p class="eyebrow">Lưu lại những dấu mốc</p><h2>Thành tựu & Huy hiệu</h2>
+        <p class="muted">Thành viên dùng <strong>/profile</strong> để xem huy hiệu và tiến độ. Huy hiệu được giữ qua các mùa, riêng cho từng máy chủ.</p>
+        <p class="field-help">Chat áp dụng thời gian chờ nhận XP; voice chỉ tính phút hoạt động hợp lệ. Mốc chat/voice có thể mở từ dữ liệu đã có khi thành viên xem hồ sơ. Cú đêm và BXH mùa bắt đầu ghi nhận từ khi bật tính năng.</p>
+        <div id="achievement-catalog" class="achievement-list" aria-live="polite"></div>
+      </section>
+      <section class="panel tab-panel" id="panel-games" role="tabpanel" aria-labelledby="tab-games" hidden>
+        <p class="eyebrow">Tìm những người cùng sở thích</p><h2>Role game tự chọn</h2>
+        <label class="toggle-row"><span>Cho thành viên tự chọn game</span><input type="checkbox" name="gameRoles.enabled" class="switch"></label>
+        <label>Cách chọn game<select name="gameRoles.mode"><option value="multiple">Được chọn nhiều game</option><option value="single">Chỉ chọn một game</option></select></label>
+        <p class="field-help">Tạo role trước trong Discord rồi thêm vào danh sách dưới đây (tối đa 25 game). Role game không được có quyền quản trị/điều hành hoặc trùng role cấp bậc.</p>
+        <div id="game-roles"></div><button type="button" id="add-game-role" class="button secondary">+ Thêm game</button>
+        <p class="field-help">Sau khi lưu, thành viên dùng <strong>/games</strong> để tự nhận/gỡ role. Bảng chọn hoạt động sau khi bot khởi động lại; nếu đổi danh sách game, hãy đăng lại bảng chọn.</p>
+        <div class="game-panel-publish"><h3>Đăng bảng chọn vào kênh</h3>
+          <label>Kênh đăng bảng chọn<select id="game-panel-channel" data-channel="text"><option value="">Chọn kênh văn bản</option></select></label>
+          <button type="button" id="publish-game-panel" class="button secondary">Đăng bảng chọn game →</button>
+          <p id="game-panel-status" role="status" class="field-help">Lưu cấu hình trước khi đăng bảng chọn.</p>
+        </div>
+      </section>
       <section class="panel tab-panel" id="panel-leaderboard" role="tabpanel" aria-labelledby="tab-leaderboard" hidden>
         <div class="section-toolbar"><div><p class="eyebrow">Những người giữ nhịp cộng đồng</p><h2>Bảng xếp hạng</h2></div><button type="button" class="button secondary" id="refresh-leaderboard">Làm mới ↻</button></div>
+        <div class="fields-grid leaderboard-filters"><label>Kỳ xếp hạng<select id="leaderboard-period"><option value="all">Tổng</option><option value="week">Tuần</option><option value="month">Tháng</option></select></label>
+          <label id="leaderboard-season-label" hidden>Mùa<select id="leaderboard-season"><option value="">Mùa hiện tại</option></select></label></div>
         <div id="leaderboard" aria-live="polite"></div>
         <nav id="leaderboard-pagination" class="leaderboard-pagination" aria-label="Phân trang bảng xếp hạng" hidden>
           <div class="pagination-heading"><span id="leaderboard-range" class="muted"></span><span id="leaderboard-page" role="status"></span></div>

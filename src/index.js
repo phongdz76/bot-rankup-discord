@@ -5,6 +5,7 @@ import { startWebServer } from './server.js';
 import { stopVoiceXpTracker } from './core/voiceXp.js';
 import { retryStartup } from './services/startup.js';
 import { config } from './config/index.js';
+import { startSeasonTracker, stopSeasonTracker } from './services/seasons.js';
 
 let web;
 let stopping = false;
@@ -18,6 +19,7 @@ async function bootstrap() {
     console.warn('[Bootstrap] MongoDB chưa sẵn sàng; bot không đăng nhập để tránh mất XP. /health trả 503.');
     return;
   }
+  startSeasonTracker();
   if (!config.botEnabled) {
     console.log('[Bootstrap] BOT_ENABLED=false: chỉ chạy dashboard, không kết nối bot Discord.');
     return;
@@ -34,6 +36,7 @@ async function shutdown(signal, code = 0) {
   console.log(`[Process] ${signal}: đang đóng kết nối...`);
   const timeout = setTimeout(() => process.exit(1), 10000).unref();
   stopVoiceXpTracker();
+  stopSeasonTracker();
   client.emit('diagnosticsStop');
   await client.destroy();
   if (web?.server) await new Promise(resolve => web.server.close(resolve));

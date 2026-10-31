@@ -4,6 +4,9 @@ import { requireLogin, requireGuildManager, csrfProtection } from '../middleware
 import { getGuildConfig, saveGuildConfig } from '../../services/guildConfig.js';
 import { getDefaultGuildConfig } from '../../config/index.js';
 import { getGuildLeaderboard } from '../../services/roleSync.js';
+import { getSeasonLeaderboard, getSeasonHistory } from '../../services/seasons.js';
+import { getAchievementSummary } from '../../services/achievements.js';
+import { isSafeGameRole, publishGameRolePanel } from '../../services/gameRoles.js';
 
 export function settingsRoutes(client) {
   const router = Router();
@@ -14,12 +17,15 @@ export function settingsRoutes(client) {
   router.get('/api/guilds/:id/settings', route(async (req, res) => {
     await req.guild.channels.fetch();
     const me = await req.guild.members.fetchMe();
+    const settings = await getGuildConfig(req.guild.id);
     res.json({
-      settings: await getGuildConfig(req.guild.id),
+      settings,
       channels: [...req.guild.channels.cache.values()].map(ch => ({ id: ch.id, name: ch.name, type: ch.type })),
       roles: [...req.guild.roles.cache.values()].filter(r => r.id !== req.guild.id && !r.managed && r.editable && me.permissions.has('ManageRoles'))
         .map(r => ({ id: r.id, name: r.name })),
       excludedRoleOptions: [...req.guild.roles.cache.values()].filter(r => r.id !== req.guild.id).map(r => ({ id: r.id, name: r.name })),
+      gameRoleOptions: [...req.guild.roles.cache.values()].filter(r => r.id !== req.guild.id && isSafeGameRole(r) && me.permissions.has('ManageRoles') &&
+        ![...settings.roleRewards, ...(settings.roleBaselines || [])].some(item => item.roleId === r.id)).map(r => ({ id: r.id, name: r.name })),
     });
   }));
   router.post('/api/guilds/:id/settings', csrfProtection, route(async (req, res) => {
@@ -31,7 +37,22 @@ export function settingsRoutes(client) {
   }));
   router.get('/api/guilds/:id/leaderboard', route(async (req, res) => {
     const page = req.query.page === undefined ? 1 : Number(req.query.page);
-    res.json(await getGuildLeaderboard(req.guild, page));
+    const period = req.query.period || 'all';
+    if (period === 'all') {
+      if (req.query.season) return res.status(400).json({ error: 'Chọn tuần hoặc tháng để xem mùa cũ.' });
+      return res.json(await getGuildLeaderboard(req.guild, page));
+    }
+    res.json(await getSeasonLeaderboard(req.guild.id, period, page, req.query.season));
+  }));
+  router.get('/api/guilds/:id/seasons', route(async (req, res) => {
+    res.json({ seasons: await getSeasonHistory(req.guild.id, req.query.period || 'week') });
+  }));
+  router.get('/api/guilds/:id/achievements', route(async (req, res) => {
+    res.json({ achievements: await getAchievementSummary(req.guild.id) });
+  }));
+  router.post('/api/guilds/:id/game-roles/panel', csrfProtection, route(async (req, res) => {
+    if (!client.isReady()) return res.status(503).json({ error: 'Bot chưa kết nối Discord.' });
+    res.json(await publishGameRolePanel(req.guild, req.body.channelId));
   }));
   return router;
 }
