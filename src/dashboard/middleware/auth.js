@@ -27,7 +27,11 @@ export function requireGuildManager(client) {
   return async (req, res, next) => {
     try {
       if (!/^\d{17,20}$/.test(req.params.id)) return res.status(400).json({ error: 'Server ID không hợp lệ.' });
-      if (!client.isReady()) return res.status(503).json({ error: 'Bot chưa kết nối Discord.' });
+      if (!client.isReady()) {
+        const message = 'Bot đang kết nối lại với Discord. Phiên đăng nhập vẫn được giữ; hãy quay lại sau khi kết nối được khôi phục.';
+        if (req.originalUrl.startsWith('/api/')) return res.status(503).json({ error: message });
+        return res.status(503).render('error', { title: 'Bot đang kết nối lại', message, supportCode: 'BOT_RECONNECTING', retryPath: req.path });
+      }
       const guild = client.guilds.cache.get(req.params.id);
       if (!guild) return res.status(404).json({ error: 'Bot chưa tham gia server này.' });
       // Không tin quyền được cache trong OAuth/session: fetch role và member mới nhất.

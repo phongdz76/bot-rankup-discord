@@ -2,7 +2,6 @@ import {
   Client,
   GatewayIntentBits,
   RateLimitError,
-  Routes,
   Collection,
   Events,
   MessageFlags
@@ -23,6 +22,7 @@ import * as setupCommand from '../commands/setup.js';
 import * as profileCommand from '../commands/profile.js';
 import * as gamesCommand from '../commands/games.js';
 import { handleGameRoleInteraction } from './gameRoles.js';
+import { registerCommandsOnce } from './commandRegistry.js';
 
 export const client = new Client({
   // Callback hết hạn nhanh: không xếp lại vào hàng đợi khi đã nhận 429.
@@ -57,7 +57,7 @@ client.commands.set(gamesCommand.data.name, gamesCommand);
 /**
  * Đăng ký Slash Commands với Discord API
  */
-export async function registerSlashCommands(rest = client.rest) {
+export async function registerSlashCommands(rest = client.rest, { force = false } = {}) {
   if (!config.token || !config.clientId) {
     console.warn('[Discord] [WARN] Thieu DISCORD_TOKEN hoac DISCORD_CLIENT_ID trong .env.');
     return null;
@@ -67,12 +67,10 @@ export async function registerSlashCommands(rest = client.rest) {
   const commandsBody = [...client.commands.values()].map(command => command.data.toJSON());
 
   try {
-    console.log('[Discord] [INFO] Dang dang ky Slash Commands Global...');
-    const registered = await rest.put(Routes.applicationCommands(config.clientId), {
-      body: commandsBody
-    });
+    const { commands: registered, cached } = await registerCommandsOnce(rest, config.clientId, commandsBody, { force });
     client.registeredCommands = new Collection(registered.map(command => [command.id, command]));
-    console.log('[Discord] [INFO] Da dang ky Slash Commands Global thanh cong.');
+    console.log(cached ? '[Discord] COMMANDS_UNCHANGED: dùng danh sách lệnh đã đăng ký, không gọi lại Discord.'
+      : '[Discord] [INFO] Da dang ky Slash Commands Global thanh cong.');
     return registered;
   } catch (error) {
     console.error('[Discord] [ERROR] Dang ky Slash Commands that bai:', JSON.stringify(getErrorDiagnostics(error)));

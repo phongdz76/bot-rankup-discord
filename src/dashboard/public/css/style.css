@@ -727,6 +727,9 @@ h1 em {
   text-align: center;
   padding: 70px 30px;
 }
+.discord-notice { margin-bottom: 28px; border-color: #76505b; }
+.discord-notice h2 { font-size: 23px; margin-top: 0; }
+.discord-notice [aria-disabled="true"] { opacity: 0.65; cursor: wait; }
 
 .empty-state p {
   color: var(--muted);

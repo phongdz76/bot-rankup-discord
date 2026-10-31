@@ -1,7 +1,7 @@
 import { client, registerSlashCommands } from '../src/services/discord.js';
 
 try {
-  const commands = await registerSlashCommands();
+  const commands = await registerSlashCommands(undefined, { force: true });
   if (!commands) process.exitCode = 1;
   else console.table(commands.map(command => ({
     command: `/${command.name}`, id: command.id,

@@ -9,13 +9,13 @@ import { configureAuth } from './dashboard/auth.js';
 import { createSessionStore } from './dashboard/sessionStore.js';
 import { SESSION_MAX_AGE_MS } from './dashboard/sessionRenewal.js';
 import { csrfToken } from './dashboard/middleware/auth.js';
-import { discordApi } from './dashboard/discordApi.js';
+import { createDiscordApi } from './dashboard/discordApi.js';
 import { publicRoutes } from './dashboard/routes/index.js';
 import { serverRoutes } from './dashboard/routes/servers.js';
 import { settingsRoutes } from './dashboard/routes/settings.js';
 import { interactionHttpRoutes } from './services/interactionHttp.js';
 
-export function createWebApp({ client, settings = config, store, api = discordApi, authLogger } = {}) {
+export function createWebApp({ client, settings = config, store, api = createDiscordApi(), authLogger } = {}) {
   const app = express();
   app.disable('x-powered-by');
   // Một reverse proxy (Render); không tin X-Forwarded-For tùy ý.
@@ -94,9 +94,11 @@ export function createWebApp({ client, settings = config, store, api = discordAp
     if (res.headersSent) return next(error);
     const status = error.status || 500;
     if (status >= 500) console.error('[Dashboard]', error.message);
-    const message = status < 500 ? error.message : 'Không thể xử lý yêu cầu. Hãy thử lại sau.';
+    const message = status < 500 || error.supportCode ? error.message : 'Không thể xử lý yêu cầu. Hãy thử lại sau.';
+    if (error.retryAfterSeconds > 0) res.set('Retry-After', String(Math.ceil(error.retryAfterSeconds)));
     if (req.path.startsWith('/api/')) return res.status(status).json({ error: message });
-    res.status(status).render('error', { title: 'Chưa thể tiếp tục', message });
+    res.status(status).render('error', { title: status === 429 ? 'Discord đang giới hạn yêu cầu' : 'Chưa thể tiếp tục', message,
+      ...(error.supportCode ? { supportCode: error.supportCode } : {}) });
   });
   return app;
 }

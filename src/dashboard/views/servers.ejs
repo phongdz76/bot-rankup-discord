@@ -2,15 +2,25 @@
 <main id="main" class="container page-content">
   <p class="eyebrow">Máy chủ của tôi</p><h1>Chọn máy chủ của bạn</h1>
   <p class="lead">Xin chào <%= user.username %>! Đây là các máy chủ bạn có quyền quản lý.</p>
+  <% if (problem) { %>
+    <section class="panel discord-notice" role="status" data-support-code="<%= problem.supportCode %>">
+      <h2><%= problem.status === 429 ? 'Discord đang giới hạn tải danh sách máy chủ' : 'Kết nối Discord tạm gián đoạn' %></h2>
+      <p>Phiên đăng nhập của bạn vẫn được giữ. <%= cached ? 'Danh sách bên dưới là bản đã tải trước đó; quyền quản lý luôn được kiểm tra lại khi mở máy chủ.' : 'Chưa thể lấy danh sách từ Discord; đây không phải thông báo bạn mất quyền quản lý.' %></p>
+      <p class="field-help">Có thể thử tải lại từ <strong><%= new Date(problem.retryAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit' }) %></strong> (giờ Việt Nam). Đây là mốc thử lại sớm nhất, không bảo đảm Discord đã gỡ giới hạn.</p>
+      <a class="button secondary" href="/servers" data-discord-retry-at="<%= problem.retryAt %>" aria-disabled="true">Chờ để thử lại</a>
+      <p class="field-help">Mã hỗ trợ: <code><%= problem.supportCode %></code></p>
+    </section>
+  <% } %>
+  <% if (!botReady && guilds.length) { %><p class="field-help">Bot đang kết nối lại với Discord. Bạn có thể xem danh sách đã lưu; quản lý cài đặt sẽ khả dụng khi kết nối được khôi phục.</p><% } %>
   <div class="server-grid">
     <% for (const guild of guilds) { %>
       <article class="panel server-card">
-        <div class="server-top"><% if (guild.icon) { %><img class="server-icon" src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="" width="56" height="56"><% } else { %><span class="server-icon server-placeholder"><%= guild.name.slice(0, 2) %></span><% } %><span class="pill <%= guild.botPresent ? 'online' : '' %>"><%= guild.botPresent ? 'Đã có Hutao-Chan' : 'Chưa có bot' %></span></div>
+        <div class="server-top"><% if (guild.icon) { %><img class="server-icon" src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="" width="56" height="56"><% } else { %><span class="server-icon server-placeholder"><%= guild.name.slice(0, 2) %></span><% } %><span class="pill <%= guild.botPresent ? 'online' : '' %>"><%= guild.botPresent ? 'Đã có Hutao-Chan' : guild.botPresent === null ? 'Đang chờ kết nối' : 'Chưa có bot' %></span></div>
         <h2><%= guild.name %></h2><p><%= guild.memberCount ? guild.memberCount.toLocaleString('vi-VN') + ' thành viên' : 'Sẵn sàng kết nối cộng đồng' %></p>
-        <% if (guild.botPresent) { %><a class="button secondary full" href="/servers/<%= guild.id %>">Quản lý máy chủ →</a><% } else { %><a class="button secondary full" href="<%= inviteUrl %>&guild_id=<%= guild.id %>&disable_guild_select=true">Mời bot vào máy chủ ↗</a><% } %>
+        <% if (guild.botPresent !== false) { %><a class="button secondary full" href="/servers/<%= guild.id %>"><%= guild.botPresent ? 'Quản lý máy chủ' : 'Kiểm tra máy chủ' %> →</a><% } else { %><a class="button secondary full" href="<%= inviteUrl %>&guild_id=<%= guild.id %>&disable_guild_select=true">Mời bot vào máy chủ ↗</a><% } %>
       </article>
     <% } %>
   </div>
-  <% if (!guilds.length) { %><div class="panel empty-state"><h2>Chưa tìm thấy máy chủ để quản lý</h2><p>Bạn cần quyền Quản lý máy chủ hoặc Quản trị viên. Sau khi được cấp quyền, hãy tải lại trang.</p></div><% } %>
+  <% if (!guilds.length && !problem) { %><div class="panel empty-state"><h2>Chưa tìm thấy máy chủ để quản lý</h2><p>Bạn cần quyền Quản lý máy chủ hoặc Quản trị viên. Sau khi được cấp quyền, hãy tải lại trang.</p></div><% } %>
 </main>
 <%- include('partials/footer') %>

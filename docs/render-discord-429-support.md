@@ -67,3 +67,20 @@ The response summary for 16:25 recorded exactly six successful bot REST response
 These two deadlines converge around 17:32:55 Asia/Saigon. The counter includes every received HTTP response, including SDK retries, for this bot's REST client. It excludes OAuth/dashboard calls, other processes, other tenants, and requests that have not produced a response. This observation does not indicate a burst from this bot's REST client preceding the new restriction.
 
 The HTTP 429 error bodies contain numeric code `0`; no `X-RateLimit-Bucket` was detected. Code `0` alone is insufficient to classify the restriction as an IP ban. Please investigate whether another service sharing the outbound address or another upstream restriction accounts for the recurrence. Raising compute resources alone has not been established as a remedy. The deployment is diagnostic instrumentation; it has not fixed the recurring upstream rejection.
+
+## Recurrence around 19:56–20:05 on 2026-10-31
+
+All user-facing times in this section are Asia/Saigon (UTC+07:00). Render service remains `srv-dbfoos7avr4c73dk1njg` in Singapore.
+
+The bot completed login and global command registration at 19:54:22. The 19:54 response summary again counted six successful bot REST responses: one `other`, four `guild`, one `application`. After the next deploy, the initial startup HTTP request was rejected at 19:56:26 with HTTP 429, `retryAfterSeconds: 3523`, `discordCode: 0`, JSON format, and Ray ID `a532d1d98bde52ea-SIN`. Another deploy's startup request at 20:02:03 received HTTP 429 with `retryAfterSeconds: 3185` and Ray ID `a532da18adf9ce11-SIN`. These point to approximately **20:55:09** as the earliest retry time; repeated deploys did not establish recovery or a new deadline.
+
+The deployment of revision `a62345e` succeeded, its web process remained available and MongoDB was connected, but `/health` was HTTP 503 with `discord: false`. Between 20:04:57 and 20:05:41, the authenticated dashboard logged repeated upstream failures while loading the guild list. The user's screenshot still displayed the signed-in header, so the error screen did not by itself indicate missing authentication. This dashboard path previously called Discord every time `/servers` was requested and collapsed upstream errors into HTTP 502 with a generic error page. Its calls were not part of the bot REST response summary.
+
+Application mitigations now being introduced:
+
+- Persist a minimal guild directory in encrypted sessions: 5-minute freshness, up to 24-hour stale display during transient upstream failure. The directory is never accepted as authority to read/write guild settings; live permission checks remain in place.
+- Coalesce concurrent directory loads and persist provider retry timing in the session so reload/deploy does not immediately repeat an exhausted call. Missing provider timing uses a 60-second application pause, not an asserted Discord unblock time.
+- Preserve HTTP 429 and sanitized retry/scope/Ray ID metadata for dashboard calls; render a signed-in waiting page rather than instructing the user to restart OAuth.
+- Persist a hash of successful command registrations; unchanged restarts reuse registered IDs without another global command PUT. Explicit `npm run register` still forces synchronization.
+
+These reduce application traffic and improve failure handling; they do **not** establish or resolve the cause of upstream 429. Please correlate the Ray IDs with the service's outbound address and investigate the actual rate-limit scope and invalid-request attribution. Render documents shared regional outbound ranges. Its dedicated-IP alternative requires a Pro workspace and an additional fee; the user's constraint is to keep this deployment free, so no plan/IP change has been authorized or made. No credentials, raw response bodies, authorization codes, or session cookies are included in this report.

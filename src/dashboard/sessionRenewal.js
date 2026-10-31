@@ -101,7 +101,7 @@ export function createSessionRenewal({ settings, cooldown, authLogger }) {
         : 'Chưa thể gia hạn kết nối Discord. Phiên đăng nhập vẫn được giữ, hãy thử lại sau.';
       if (req.path.startsWith('/api/')) return res.status(status).json({ error: message });
       res.status(status).render('error', { title: 'Kết nối Discord tạm gián đoạn', message,
-        supportCode: seconds ? 'OAUTH_RATE_LIMITED' : failure.code });
+        supportCode: seconds ? 'OAUTH_RATE_LIMITED' : failure.code, retryPath: req.path });
     }
   };
 }

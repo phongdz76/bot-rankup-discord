@@ -1,4 +1,16 @@
 (() => {
+  const retryLink = document.querySelector('[data-discord-retry-at]');
+  if (retryLink) {
+    const retryAt = Number(retryLink.dataset.discordRetryAt);
+    const updateRetry = () => {
+      const seconds = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+      retryLink.setAttribute('aria-disabled', String(seconds > 0));
+      retryLink.textContent = seconds ? `Thử lại sau ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : 'Tải lại danh sách →';
+      if (seconds) setTimeout(updateRetry, 1000);
+    };
+    retryLink.addEventListener('click', event => { if (Date.now() < retryAt) event.preventDefault(); });
+    updateRetry();
+  }
   const root = document.querySelector('[data-settings-guild]');
   if (!root) return;
   const form = document.querySelector('#settings-form');
