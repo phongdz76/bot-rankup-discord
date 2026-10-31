@@ -6,7 +6,10 @@
   const csrf = document.querySelector('meta[name=csrf-token]').content;
   const toast = document.querySelector('#toast');
   const status = document.querySelector('#save-status');
-  let current, roles = [], gameRoleOptions = [], timer, dirty = false;
+  const saveBar = document.querySelector('#settings-save-bar');
+  const saveButton = document.querySelector('#save-settings');
+  const discardButton = document.querySelector('#discard-settings');
+  let current, roles = [], gameRoleOptions = [], timer, dirty = false, saving = false, savedSnapshot = '', saveError = '';
   const field = name => form.elements.namedItem(name);
   function notify(message, error = false) {
     toast.textContent = message; toast.classList.toggle('error', error); toast.hidden = false;
@@ -27,7 +30,27 @@
     const parts = path.split('.'); const key = parts.pop();
     parts.reduce((target, part) => target[part], object)[key] = value;
   }
-  function markDirty() { dirty = true; status.textContent = 'Có thay đổi chưa lưu.'; }
+  function formSnapshot() {
+    return JSON.stringify({
+      fields: [...form.elements].filter(input => input.name).map(input => [input.name,
+        input.type === 'checkbox' ? input.checked : input.multiple ? [...input.selectedOptions].map(item => item.value) : input.value]),
+      rewards: [...form.querySelectorAll('.role-row')].map(row => [row.querySelector('[data-reward-level]').value, row.querySelector('[data-reward-role]').value]),
+      games: [...form.querySelectorAll('.game-role-row')].map(row => [row.querySelector('[data-game-label]').value, row.querySelector('[data-game-role]').value]),
+    });
+  }
+  function renderSaveState() {
+    saveBar.hidden = !dirty && !saving;
+    document.body.classList.toggle('has-unsaved-settings', !saveBar.hidden);
+    saveBar.setAttribute('aria-busy', String(saving));
+    status.textContent = saving ? 'Đang lưu thay đổi…' : saveError || (dirty ? 'Bạn có thay đổi chưa lưu.' : 'Tất cả thay đổi đã được lưu.');
+    saveButton.disabled = saving || !dirty;
+    discardButton.disabled = saving;
+  }
+  function markDirty() {
+    dirty = formSnapshot() !== savedSnapshot;
+    saveError = '';
+    renderSaveState();
+  }
   function renderPreviewText(element, text) {
     element.replaceChildren(...text.split(/(\*\*[\s\S]+?\*\*)/g).filter(Boolean).map(part => {
       if (!part.startsWith('**') || !part.endsWith('**')) return document.createTextNode(part);
@@ -82,7 +105,8 @@
         label.append(checkbox, text); list.append(label);
       }
     }
-    dirty = false; status.textContent = 'Tất cả thay đổi đã được lưu.';
+    savedSnapshot = formSnapshot(); dirty = false; saveError = '';
+    renderSaveState();
     updatePreview();
   }
   let leaderboardPage = 1, leaderboardTotalPages = 1, leaderboardLoading = false;
@@ -253,8 +277,14 @@
   refreshLeaderboard.addEventListener('click', () => leaderboard());
   previousPage.addEventListener('click', () => leaderboard(leaderboardPage - 1));
   nextPage.addEventListener('click', () => leaderboard(leaderboardPage + 1));
+  discardButton.addEventListener('click', () => {
+    if (saving) return;
+    populate(structuredClone(current));
+    notify('Đã hoàn tác các thay đổi chưa lưu.');
+  });
   form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (saving || !dirty) return;
     const invalid = [...form.elements].find(input => input.willValidate && !input.validity.valid);
     if (invalid) {
       const panel = invalid.closest('.tab-panel'); selectTab(tabs.find(tab => `panel-${tab.dataset.tab}` === panel.id));
@@ -272,11 +302,16 @@
     settings.gameRoles.roles = [...document.querySelectorAll('.game-role-row')].map(row => ({
       label: row.querySelector('[data-game-label]').value, roleId: row.querySelector('[data-game-role]').value,
     }));
-    const saveButtons = [...form.querySelectorAll('button[type="submit"]')];
-    saveButtons.forEach(button => { button.disabled = true; }); status.textContent = 'Đang lưu cấu hình…';
-    try { populate((await request('/settings', { method: 'POST', body: JSON.stringify({ settings, revision: current.revision }) })).settings); notify('Đã lưu cấu hình server.'); }
-    catch (error) { status.textContent = 'Chưa lưu được. Các thay đổi vẫn ở trên biểu mẫu.'; notify(error.message, true); }
-    finally { saveButtons.forEach(button => { button.disabled = false; }); }
+    const submittedSnapshot = formSnapshot();
+    saving = true; saveError = ''; renderSaveState();
+    try {
+      const saved = (await request('/settings', { method: 'POST', body: JSON.stringify({ settings, revision: current.revision }) })).settings;
+      if (formSnapshot() === submittedSnapshot) populate(saved);
+      else { current = saved; savedSnapshot = submittedSnapshot; markDirty(); }
+      notify('Đã lưu cấu hình server.');
+    }
+    catch (error) { saveError = 'Chưa lưu được. Thay đổi của bạn vẫn được giữ.'; notify(error.message, true); }
+    finally { saving = false; renderSaveState(); }
   });
   document.querySelector('#reset-settings').addEventListener('click', async () => {
     if (!confirm('Đặt lại toàn bộ cấu hình server? XP và role đã cấp vẫn được giữ.')) return;
