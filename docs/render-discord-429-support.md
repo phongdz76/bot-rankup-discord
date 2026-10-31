@@ -51,3 +51,19 @@ The command execution entries above are shortened; the status and diagnostic JSO
 During this investigation, `/health` returned HTTP 200 with `database: true`, `discord: true`, `botEnabled: true`, and revision `ff90770`. This endpoint checks database/Gateway readiness, not successful interaction acknowledgment. Local read-only requests to `/users/@me` and `/oauth2/applications/@me` both returned HTTP 200; the bot identity matched the configured application and no interactions endpoint URL was configured. These checks establish local authentication health, not local interaction-callback success.
 
 The reviewed code uses cached voice/member state for voice XP, compares roles before writing changes, and caches completed guild role scans. This review does not establish the actual outgoing request rate or the cause of the restriction. Render documents shared outbound IP ranges within a region, but the observed JSON 429 responses and Cloudflare Ray IDs alone do not establish an IP ban, shared-IP interference, or Cloudflare error 1015. Please use the supplied timestamps and Ray IDs to investigate the restriction and its recurrence.
+
+## Measured recurrence at 16:37 on 2026-10-31
+
+Revision `9459cee` adds response counts and safely reads cloned error bodies. It was deployed at 16:23. The initial login request returned HTTP 429, `discordCode: 0`, and `Retry-After: 144` at 16:23:22 (Ray ID `a53199c25f41604b-SIN`). The process waited and logged in successfully at 16:25:48.
+
+The response summary for 16:25 recorded exactly six successful bot REST responses: one `other`, one `application`, and four `guild`. Global command registration and both guild role scans completed. No further bot REST responses were logged before the next `/help` at 16:37:54. That first command after the idle interval was rejected again:
+
+```text
+16:26:20 [Discord REST] REQUEST_SUMMARY {"minute":"2026-10-31T09:25:00.000Z","counts":{"other:ok":1,"application:ok":1,"guild:ok":4}}
+16:37:54 [Discord REST] HTTP_ERROR {"operation":"interaction","httpStatus":429,"retryAfterSeconds":3301,"discordCode":0,"responseFormat":"json","cfRay":"a531af0aca30ce7a-SIN"}
+16:38:15 [Discord REST] HTTP_ERROR {"operation":"interaction","httpStatus":429,"retryAfterSeconds":3280,"discordCode":0,"responseFormat":"json","cfRay":"a531af90dc7262f7-SIN"}
+```
+
+These two deadlines converge around 17:32:55 Asia/Saigon. The counter includes every received HTTP response, including SDK retries, for this bot's REST client. It excludes OAuth/dashboard calls, other processes, other tenants, and requests that have not produced a response. This observation does not indicate a burst from this bot's REST client preceding the new restriction.
+
+The HTTP 429 error bodies contain numeric code `0`; no `X-RateLimit-Bucket` was detected. Code `0` alone is insufficient to classify the restriction as an IP ban. Please investigate whether another service sharing the outbound address or another upstream restriction accounts for the recurrence. Raising compute resources alone has not been established as a remedy. The deployment is diagnostic instrumentation; it has not fixed the recurring upstream rejection.

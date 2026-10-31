@@ -137,6 +137,22 @@ Trong chế độ `BOT_ENABLED=false`, `/health` chỉ yêu cầu MongoDB, đồ
 
 Log `[Discord REST] REQUEST_SUMMARY` đếm phản hồi HTTP mỗi phút theo nhóm cố định (interaction/webhook/guild/channel/application/other) và status, bao gồm từng lần thử lại của SDK. Log lỗi thêm `operation`, mã số `discordCode` và `bucketPresent` khi upstream cung cấp. Chẩn đoán đọc bản sao phản hồi, không ghi đường dẫn/token/body hay làm thay đổi body SDK xử lý. Thống kê này chỉ bao gồm Discord REST của bot, không bao gồm OAuth/dashboard hoặc yêu cầu từ ứng dụng khác dùng chung hạ tầng.
 
+### Nhận slash command qua HTTP
+
+Discord hỗ trợ gửi tương tác đến `POST /discord/interactions` và nhận kết quả ngay trong HTTP response. Chế độ này không gửi yêu cầu callback ra Discord cho phản hồi ban đầu. Gateway vẫn chạy để nhận chat/voice/member events. Đặt `DISCORD_PUBLIC_KEY` bằng Public Key trong General Information của ứng dụng, deploy rồi chạy:
+
+```powershell
+node scripts/configure-interactions.js --endpoint=https://ten-service.onrender.com/discord/interactions
+```
+
+Script kiểm tra danh tính bot và yêu cầu endpoint từ chối chữ ký thiếu trước khi cập nhật URL; Discord tự gửi PING/chữ ký kiểm tra để xác thực endpoint. Để khôi phục nhận lệnh qua Gateway: `node scripts/configure-interactions.js --disable`. Chỉ một phương thức nhận slash command hoạt động tại một thời điểm. Không dùng token tài khoản Discord cá nhân.
+
+Endpoint xác thực Ed25519 trên raw body, timestamp tối đa 5 phút cũ/30 giây tương lai, application ID và giới hạn kích thước. Các lượt giao trùng ID dùng lại cùng kết quả trong bộ nhớ của tiến trình. `/help`, `/rank`, `/leaderboard` đọc MongoDB và dữ liệu đã đồng bộ để trả lời mà không chờ REST. `/rank` dùng dữ liệu thành viên từ payload đã ký/cache nếu có; khi Gateway chưa kết nối sẽ dùng hồ sơ MongoDB. Role và thành viên mới được cập nhật qua Gateway/đợt đồng bộ sau đó, không quét toàn bộ server ở mỗi lệnh HTTP.
+
+Tác vụ quá 2,2 giây nhận thông báo chưa có kết quả trong HTTP response; không gửi callback/followup trễ. Với `/setup`, kiểm tra lại `/setup view` trước khi gửi lại; thao tác lưu dừng trước bước ghi nếu thời hạn đã hết trong lúc kiểm tra quyền/tài nguyên. `/setup view` vẫn trả file JSON riêng tư qua multipart. `interactionsHttp.lastResponse` trên `/health` và log `[Discord HTTP] RESPONSE` ghi kết quả phản hồi HTTP, tách biệt với `discordHttp` (yêu cầu REST ra ngoài).
+
+Chế độ HTTP không tự gỡ giới hạn của OAuth, gửi tin lên cấp, cấp role hoặc các API khác. Render Free vẫn có giới hạn nghỉ khi không có lưu lượng; không có cam kết bot miễn phí luôn sẵn sàng 24/7. Nguồn: [Discord inline responses](https://docs.discord.com/developers/interactions/receiving-and-responding), [Render Free](https://render.com/docs/free).
+
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
 
 Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.

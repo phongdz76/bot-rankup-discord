@@ -92,13 +92,16 @@ export async function validateGuildResources(guild, settings) {
   }
 }
 
-export async function saveGuildConfig(guild, input, revision) {
+export async function saveGuildConfig(guild, input, revision, { signal } = {}) {
+  signal?.throwIfAborted();
   integer(revision, 0, Number.MAX_SAFE_INTEGER, 'Phiên bản cấu hình');
   const settings = validateSettings(input, guild.id);
   await validateGuildResources(guild, settings);
+  signal?.throwIfAborted();
   try {
     await GuildConfig.updateOne({ guildId: guild.id }, { $setOnInsert: getDefaultGuildConfig(guild.id) }, { upsert: true });
   } catch (error) { if (error.code !== 11000) throw error; }
+  signal?.throwIfAborted();
   const updated = await GuildConfig.findOneAndUpdate(
     { guildId: guild.id, revision }, { $set: settings, $inc: { revision: 1 } },
     { new: true, runValidators: true },

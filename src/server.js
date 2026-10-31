@@ -12,6 +12,7 @@ import { discordApi } from './dashboard/discordApi.js';
 import { publicRoutes } from './dashboard/routes/index.js';
 import { serverRoutes } from './dashboard/routes/servers.js';
 import { settingsRoutes } from './dashboard/routes/settings.js';
+import { interactionHttpRoutes } from './services/interactionHttp.js';
 
 export function createWebApp({ client, settings = config, store, api = discordApi, authLogger } = {}) {
   const app = express();
@@ -27,6 +28,9 @@ export function createWebApp({ client, settings = config, store, api = discordAp
     } },
     strictTransportSecurity: settings.production ? undefined : false,
   }));
+  // Signature verification requires the exact body, before any JSON/session middleware.
+  const interactions = interactionHttpRoutes({ client, settings });
+  app.use('/discord/interactions', interactions);
   app.get('/health', (req, res) => {
     const database = mongoose.connection.readyState === 1;
     const discord = Boolean(client?.isReady());
@@ -35,6 +39,7 @@ export function createWebApp({ client, settings = config, store, api = discordAp
       status: ready ? 'healthy' : 'degraded', database, discord,
       botEnabled: settings.botEnabled !== false,
       discordHttp: client?.httpDiagnostics?.snapshot() || null,
+      interactionsHttp: interactions.snapshot(),
       revision: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT || '') ? process.env.RENDER_GIT_COMMIT.slice(0, 7) : null,
       uptimeSeconds: Math.floor(process.uptime()),
     });

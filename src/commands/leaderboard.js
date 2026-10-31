@@ -22,10 +22,11 @@ export async function execute(interaction) {
   await interaction.deferReply();
 
   try {
-    const { entries: topUsers, page, totalPages } = await getGuildLeaderboard(interaction.guild, interaction.options.getInteger('page') || 1);
+    const guild = interaction.guild || { id: interaction.guildId, name: 'Máy chủ' };
+    const { entries: topUsers, page, totalPages } = await getGuildLeaderboard(guild, interaction.options.getInteger('page') || 1, { syncRoles: interaction.transport !== 'http' });
 
-    const embed = createLeaderboardEmbed(interaction.guild.name, topUsers);
-    embed.setTitle(`Bảng xếp hạng — ${interaction.guild.name} · Trang ${page}/${totalPages}`);
+    const embed = createLeaderboardEmbed(guild.name, topUsers);
+    embed.setTitle(`Bảng xếp hạng — ${guild.name} · Trang ${page}/${totalPages}`);
     await interaction.editReply({ embeds: [embed] });
   } catch (error) {
     console.error(`[Command /leaderboard] [ERROR]:`, error.message);

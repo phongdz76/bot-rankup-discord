@@ -82,7 +82,8 @@ export async function execute(interaction) {
     } else if (group === 'xp' && command === 'voice') {
       settings.xpSettings.voice = { rewardPerMinute: interaction.options.getInteger('reward'), minChannelMembers: interaction.options.getInteger('members') };
     } else if (command === 'channel') settings.levelUpChannelId = interaction.options.getChannel('channel')?.id || null;
-    await saveGuildConfig(interaction.guild, settings, revision);
+    if (!interaction.guild) return interaction.editReply('Bot đang kết nối lại với server. Hãy thử lưu cấu hình sau.');
+    await saveGuildConfig(interaction.guild, settings, revision, { signal: interaction.signal });
     await interaction.editReply('Đã lưu cấu hình. Bot áp dụng ở lần xử lý tiếp theo; role được đồng bộ khi thành viên nhận XP.');
   } catch (error) {
     if (!(error instanceof SettingsError)) console.error('[Setup]', error.message);

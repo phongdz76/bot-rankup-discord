@@ -94,9 +94,9 @@ async function synchronize(guild) {
   return { memberCount, settings };
 }
 
-export async function getGuildLeaderboard(guild, requestedPage = 1) {
+export async function getGuildLeaderboard(guild, requestedPage = 1, { syncRoles = true } = {}) {
   if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) throw new SettingsError('Số trang không hợp lệ.');
-  await ensureGuildRoleSync(guild);
+  if (syncRoles) await ensureGuildRoleSync(guild);
   const filter = { guildId: guild.id, inGuild: true };
   const memberCount = await User.countDocuments(filter);
   const pageSize = 10;

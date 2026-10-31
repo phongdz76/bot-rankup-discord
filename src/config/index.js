@@ -8,6 +8,7 @@ export const config = {
   botEnabled: process.env.BOT_ENABLED !== 'false',
   token: process.env.DISCORD_TOKEN || '',
   clientId: snowflake(process.env.DISCORD_CLIENT_ID),
+  interactionsPublicKey: process.env.DISCORD_PUBLIC_KEY || '',
   // Chỉ dùng để nhập cấu hình v1, không giới hạn server.
   guildId: snowflake(process.env.GUILD_ID),
   levelUpChannelId: snowflake(process.env.LEVEL_UP_CHANNEL_ID),

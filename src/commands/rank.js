@@ -17,9 +17,15 @@ export async function execute(interaction) {
   await interaction.deferReply();
   const user = interaction.options.getUser('user') || interaction.user;
   if (user.bot) return interaction.editReply({ content: 'Bot không được tính điểm và xếp hạng.' });
-  await ensureGuildRoleSync(interaction.guild);
+  const inline = interaction.transport === 'http';
+  if (!inline) await ensureGuildRoleSync(interaction.guild);
   const settings = await getGuildConfig(interaction.guildId);
-  const member = await interaction.guild.members.fetch({ user: user.id, force: true }).catch(() => null);
+  // HTTP commands use signed resolved data / Gateway cache and stored profiles.
+  // Do not queue a fresh REST fetch before the inline response deadline.
+  const resolved = inline ? interaction.options.getMember('user') || (user.id === interaction.user.id ? interaction.member : null) : null;
+  const cached = inline ? interaction.guild?.members.cache?.get(user.id) : null;
+  const member = inline ? (resolved?.roles?.cache ? resolved : cached) || null
+    : await interaction.guild.members.fetch({ user: user.id, force: true }).catch(() => null);
   const userDoc = member ? await ensureUser(member, settings) :
     await User.findOne({ guildId: interaction.guildId, userId: user.id }).lean() || { xp: 0 };
   const serverRank = await User.countDocuments({
