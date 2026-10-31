@@ -638,7 +638,7 @@ test('OAuth callback persists state in encrypted Mongo sessions across app resta
     exchanges++;
     assert.equal(code, 'test-authorization-code');
     assert.equal(params.redirect_uri, settings.dashboard.callbackUrl);
-    done(null, 'test-access-token-never-render', 'test-refresh-token', { expires_in: 3600 });
+    done(null, 'test-access-token-never-render', 'test-refresh-token', { expires_in: 604800 });
   });
   const firstStore = makeStore();
   const secondStore = makeStore();
@@ -658,6 +658,16 @@ test('OAuth callback persists state in encrypted Mongo sessions across app resta
     const storedSessions = await mongoose.connection.db.collection('oauth_test_sessions').find({}).toArray();
     assert(storedSessions.length > 0);
     assert(!JSON.stringify(storedSessions).includes('test-access-token-never-render'));
+    assert(!JSON.stringify(storedSessions).includes('test-refresh-token'));
+    const persisted = await new Promise((resolve, reject) => secondStore.get(storedSessions[0]._id,
+      (error, value) => error ? reject(error) : resolve(value)));
+    assert.equal(persisted.passport.user.refreshToken, 'test-refresh-token');
+    assert(persisted.passport.user.expiresAt > Date.now() + 6 * 86400000);
+    const returningCookie = callback.headers['set-cookie'][0].split(';')[0];
+    const restartedApp = createWebApp({ client, settings, store: firstStore, api, authLogger: () => {} });
+    await request(restartedApp).get('/').set('Cookie', returningCookie).expect(302).expect('Location', '/servers');
+    await request(restartedApp).get('/auth/discord').set('Cookie', returningCookie).expect(302).expect('Location', '/servers');
+    assert.equal(exchanges, 1);
     const replay = await request(secondApp).get('/auth/discord/callback').query({ code: 'test-authorization-code', state }).set('Cookie', cookie).expect(401);
     assert(replay.text.includes('OAUTH_SESSION_MISSING'));
     assert.equal(exchanges, 1);

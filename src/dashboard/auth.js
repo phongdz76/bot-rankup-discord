@@ -4,6 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import { csrfProtection } from './middleware/auth.js';
 import { describeAuthFailure, logAuthFailure } from './authFailure.js';
 import { createOAuthCooldown } from './oauthCooldown.js';
+import { createSessionRenewal, tokenExpiresAt } from './sessionRenewal.js';
 
 export function configureAuth(app, settings, api, authLogger = logAuthFailure) {
   const cooldown = createOAuthCooldown();
@@ -18,13 +19,14 @@ export function configureAuth(app, settings, api, authLogger = logAuthFailure) {
   }, async (accessToken, refreshToken, params, profile, done) => {
     try {
       const user = await api('/users/@me', accessToken);
-      // Chỉ lưu thông tin cần thiết và access token trong session Mongo đã mã hóa.
+      // Token chỉ nằm trong session Mongo đã mã hóa, không gửi về trình duyệt.
       done(null, { id: user.id, username: user.global_name || user.username,
-        avatar: user.avatar, accessToken, expiresAt: Date.now() + Math.min(Number(params.expires_in) || 3600, 86400) * 1000 });
+        avatar: user.avatar, accessToken, refreshToken, expiresAt: tokenExpiresAt(params.expires_in) });
     } catch (error) { error.authStage = 'profile'; done(error); }
   }));
   app.use(passport.initialize());
   app.use(passport.session());
+  app.use(createSessionRenewal({ settings, cooldown, authLogger }));
   const limiter = rateLimit({ windowMs: 60000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false });
   const waitForDiscord = (req, res, next) => {
     const seconds = cooldown.remainingSeconds();
@@ -35,7 +37,10 @@ export function configureAuth(app, settings, api, authLogger = logAuthFailure) {
       message: `Máy chủ đang tạm nghỉ sau khi Discord giới hạn yêu cầu. Hãy thử lại sau ít nhất ${seconds} giây.`,
     });
   };
-  app.get('/auth/discord', limiter, waitForDiscord, passport.authenticate('discord'));
+  app.get('/auth/discord', (req, res, next) => {
+    if (req.isAuthenticated() && req.user?.expiresAt > Date.now()) return res.redirect('/servers');
+    next();
+  }, limiter, waitForDiscord, passport.authenticate('discord'));
   app.get('/auth/discord/callback', limiter, waitForDiscord, (req, res, next) => {
     passport.authenticate('discord', (error, user, info) => {
       if (error || !user) {

@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { PermissionFlagsBits } from 'discord.js';
 
 export function requireLogin(req, res, next) {
-  if (!req.isAuthenticated?.() || !req.user?.id || req.user.expiresAt <= Date.now()) {
+  if (!req.isAuthenticated?.() || !req.user?.id || !(req.user.expiresAt > Date.now())) {
     return req.originalUrl.startsWith('/api/') ? res.status(401).json({ error: 'Hãy đăng nhập Discord.' }) : res.redirect('/auth/discord');
   }
   next();

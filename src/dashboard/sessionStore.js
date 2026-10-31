@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import MongoStore from 'connect-mongo';
+import { SESSION_MAX_AGE_MS } from './sessionRenewal.js';
 
 export function getSessionEncryptionSecret(sessionSecret) {
   // kruptein yêu cầu đủ nhóm ký tự, kể cả với khóa hex ngẫu nhiên có entropy cao.
@@ -12,7 +13,7 @@ export function getSessionEncryptionSecret(sessionSecret) {
 export function createSessionStore(settings, collectionName = 'dashboard_sessions') {
   // connect-mongo 6 cố định phiên bản crypto tương thích với định dạng session.
   return MongoStore.create({
-    mongoUrl: settings.mongoUri, collectionName, ttl: 86400,
+    mongoUrl: settings.mongoUri, collectionName, ttl: SESSION_MAX_AGE_MS / 1000,
     crypto: { secret: getSessionEncryptionSecret(settings.dashboard.sessionSecret) },
   });
 }

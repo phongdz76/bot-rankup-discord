@@ -153,7 +153,9 @@ Tác vụ quá 2,2 giây nhận thông báo chưa có kết quả trong HTTP res
 
 Chế độ HTTP không tự gỡ giới hạn của OAuth, gửi tin lên cấp, cấp role hoặc các API khác. Render Free vẫn có giới hạn nghỉ khi không có lưu lượng; không có cam kết bot miễn phí luôn sẵn sàng 24/7. Nguồn: [Discord inline responses](https://docs.discord.com/developers/interactions/receiving-and-responding), [Render Free](https://render.com/docs/free).
 
-Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
+Dashboard ghi nhớ đăng nhập 30 ngày kể từ lần truy cập gần nhất bằng cookie HttpOnly và session MongoDB đã mã hóa. Mở lại trang chủ hoặc bấm đăng nhập khi phiên còn hiệu lực sẽ vào thẳng `/servers`. Access token được tự gia hạn bằng refresh token khi sắp hết hạn, theo thời hạn Discord trả về ([Discord OAuth2](https://docs.discord.com/developers/topics/oauth2#refresh-token-exchange-example)). Đóng/mở trình duyệt hoặc khởi động lại ứng dụng không làm mất phiên nếu vẫn dùng cùng domain, MongoDB và `SESSION_SECRET`; giữ nguyên khóa này giữa các lần deploy. Đăng xuất, xóa cookie, không truy cập quá 30 ngày hoặc thu hồi quyền ứng dụng trên Discord sẽ cần đăng nhập lại. Phiên cũ chưa có refresh token cần đăng nhập lại một lần khi token hết hạn. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
+
+Gia hạn gặp 429 sẽ tôn trọng thời gian chờ và giữ lại phiên để thử sau; không tự chuyển sang một vòng OAuth mới. Cơ chế ghi nhớ không khắc phục 429 ở lần đăng nhập đầu tiên khi chưa có phiên hợp lệ.
 
 Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.
 

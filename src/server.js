@@ -7,6 +7,7 @@ import { PermissionFlagsBits } from 'discord.js';
 import { config, dashboardEnabled, getDashboardConfigurationIssues } from './config/index.js';
 import { configureAuth } from './dashboard/auth.js';
 import { createSessionStore } from './dashboard/sessionStore.js';
+import { SESSION_MAX_AGE_MS } from './dashboard/sessionRenewal.js';
 import { csrfToken } from './dashboard/middleware/auth.js';
 import { discordApi } from './dashboard/discordApi.js';
 import { publicRoutes } from './dashboard/routes/index.js';
@@ -58,9 +59,13 @@ export function createWebApp({ client, settings = config, store, api = discordAp
     app.locals.sessionStore = sessionStore;
     app.use(session({
       name: 'hutao.sid', store: sessionStore, secret: settings.dashboard.sessionSecret,
-      resave: false, saveUninitialized: false,
-      cookie: { httpOnly: true, secure: settings.production, sameSite: 'lax', maxAge: 86400000 },
+      resave: false, saveUninitialized: false, rolling: true,
+      cookie: { httpOnly: true, secure: settings.production, sameSite: 'lax', maxAge: SESSION_MAX_AGE_MS },
     }));
+    app.use((req, res, next) => {
+      req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+      next();
+    });
     configureAuth(app, settings, api, authLogger);
   }
   app.use((req, res, next) => {
