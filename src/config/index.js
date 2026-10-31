@@ -2,9 +2,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const snowflake = value => /^\d{17,20}$/.test(value || '') ? value : '';
-const baseUrl = (process.env.DASHBOARD_URL || `http://localhost:${Number(process.env.PORT) || 3000}`).replace(/\/$/, '');
+const baseUrl = (process.env.DASHBOARD_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${Number(process.env.PORT) || 3000}`).trim().replace(/\/$/, '');
 
 export const config = {
+  botEnabled: process.env.BOT_ENABLED !== 'false',
   token: process.env.DISCORD_TOKEN || '',
   clientId: snowflake(process.env.DISCORD_CLIENT_ID),
   // Chỉ dùng để nhập cấu hình v1, không giới hạn server.

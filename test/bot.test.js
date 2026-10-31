@@ -456,9 +456,15 @@ test('help links to registered slash commands and falls back when Discord is una
   await helpCommand.execute(interaction);
   assert(reply.embeds[0].data.description.includes(`</rank:${roleId}>`));
   assert(reply.embeds[0].data.description.includes(`</help:${role2Id}>`));
-  interaction.client.application.commands = { cache: new Collection(), fetch: async () => { throw new Error('Discord unavailable'); } };
+  let fetched = false;
+  interaction.client.application.commands = { cache: new Collection(), fetch: async () => { fetched = true; throw new Error('Discord unavailable'); } };
   await helpCommand.execute(interaction);
+  assert.equal(fetched, false, 'help must not wait on another REST request for command names');
   assert(reply.embeds[0].data.description.includes('**/rank**'));
+  interaction.client.registeredCommands = commands;
+  await helpCommand.execute(interaction);
+  assert(reply.embeds[0].data.description.includes(`</rank:${roleId}>`));
+  assert.equal(fetched, false);
 });
 
 test('public pages render without OAuth; health reports disconnected bot truthfully', async () => {
@@ -473,6 +479,27 @@ test('public pages render without OAuth; health reports disconnected bot truthfu
   await request(app).get('/api/guilds/111/settings').expect(503).expect('Content-Type', /json/);
   const health = await request(app).get('/health').expect(503);
   assert.equal(health.body.discord, false); assert.equal(health.body.database, true);
+});
+
+test('local web-only mode reports the bot as disabled without claiming a Discord connection', async () => {
+  const { client } = fixture(); client.isReady = () => false;
+  const app = createWebApp({ client, settings: { ...config, botEnabled: false, dashboard: { clientSecret: '', sessionSecret: '' } } });
+  const health = await request(app).get('/health').expect(200);
+  assert.equal(health.body.botEnabled, false);
+  assert.equal(health.body.discord, false);
+});
+
+test('Render HTTPS proxy login issues a secure session cookie with the production callback', async () => {
+  const { client } = fixture();
+  const callbackUrl = 'https://bot-rankup-discord.onrender.com/auth/discord/callback';
+  const settings = { ...config, clientId: guildId, mongoUri: mongo.getUri(), production: true,
+    dashboard: { clientSecret: 'test-client-secret', sessionSecret: 'test-session-secret-longer-than-32-characters', callbackUrl } };
+  const app = createWebApp({ client, settings, store: new session.MemoryStore() });
+  const response = await request(app).get('/auth/discord').set('X-Forwarded-Proto', 'https').expect(302);
+  assert.match(response.headers['set-cookie'][0], /; Secure/);
+  assert.match(response.headers['set-cookie'][0], /; HttpOnly/);
+  assert.match(response.headers['set-cookie'][0], /; SameSite=Lax/);
+  assert.equal(new URL(response.headers.location).searchParams.get('redirect_uri'), callbackUrl);
 });
 
 test('dashboard enforces authentication, fresh guild permission, CSRF, revisions and tenant isolation', async () => {

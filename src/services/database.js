@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { config } from '../config/index.js';
+let listenersAttached = false;
 
 /**
  * Quản lý kết nối MongoDB Atlas Cloud với cơ chế auto-reconnect
@@ -10,7 +11,8 @@ export async function connectDatabase() {
     return false;
   }
 
-  try {
+  if (!listenersAttached) {
+    listenersAttached = true;
     mongoose.connection.on('connected', () => {
       console.log('[MongoDB] [INFO] Ket noi co so du lieu MongoDB Atlas thanh cong.');
     });
@@ -22,11 +24,7 @@ export async function connectDatabase() {
     mongoose.connection.on('disconnected', () => {
       console.warn('[MongoDB] [WARN] Mat ket noi toi MongoDB, dang thu ket noi lai...');
     });
-
-    await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 });
-    return true;
-  } catch (error) {
-    console.error('[MongoDB] Khởi tạo kết nối thất bại:', error.message);
-    return false;
   }
+  await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 10000 });
+  return true;
 }

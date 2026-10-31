@@ -30,8 +30,11 @@ export function createWebApp({ client, settings = config, store, api = discordAp
   app.get('/health', (req, res) => {
     const database = mongoose.connection.readyState === 1;
     const discord = Boolean(client?.isReady());
-    res.status(database && discord ? 200 : 503).json({
-      status: database && discord ? 'healthy' : 'degraded', database, discord,
+    const ready = database && (settings.botEnabled === false || discord);
+    res.status(ready ? 200 : 503).json({
+      status: ready ? 'healthy' : 'degraded', database, discord,
+      botEnabled: settings.botEnabled !== false,
+      revision: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT || '') ? process.env.RENDER_GIT_COMMIT.slice(0, 7) : null,
       uptimeSeconds: Math.floor(process.uptime()),
     });
   });

@@ -9,8 +9,8 @@ export const data = new SlashCommandBuilder().setName('help').setDescription('HÆ
 export async function execute(interaction) {
   await interaction.deferReply();
   const manager = interaction.client?.application?.commands;
-  let commands = manager?.cache;
-  if (!commands?.size && manager) commands = await manager.fetch().catch(() => null);
+  // Help remains useful even while Discord's command-list endpoint is rate limited.
+  const commands = manager?.cache?.size ? manager.cache : interaction.client?.registeredCommands;
   const mention = name => {
     const command = commands?.find(command => command.name === name && command.type === 1);
     return command ? chatInputApplicationCommandMention(name, command.id) : `**/${name}**`;

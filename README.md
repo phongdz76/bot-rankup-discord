@@ -40,6 +40,7 @@ Thiết lập:
 | `OAUTH2_CALLBACK_URL` | Ví dụ `http://localhost:3050/auth/discord/callback` |
 | `SESSION_SECRET` | Khóa ngẫu nhiên ít nhất 32 ký tự |
 | `NODE_ENV` | `development` local, `production` khi deploy HTTPS |
+| `BOT_ENABLED` | Mặc định `true`; `false` chỉ mở web/OAuth, không đăng nhập bot hay cộng XP |
 
 Tạo khóa phiên rồi điền vào `.env`:
 
@@ -66,6 +67,17 @@ npm start
 Mở URL tương ứng với `PORT`. `npm run dev` theo dõi cả `.env`; `npm start` cần khởi động lại sau khi sửa biến môi trường.
 
 Dashboard chỉ bật khi đủ Client ID, MongoDB URI, Client Secret và Session Secret hợp lệ về cấu hình. Nếu thiếu, bot và các trang công khai vẫn hoạt động khi MongoDB đã kết nối; trang đăng nhập nêu biến cần bổ sung. Nếu MongoDB không kết nối lúc khởi động, bot không đăng nhập để tránh mất dữ liệu.
+
+Lỗi kết nối MongoDB tạm thời lúc khởi động được thử lại với khoảng chờ tăng dần từ 15 giây đến 5 phút; cấu hình/credentials không hợp lệ cần sửa. Nếu đăng nhập Discord thất bại, tiến trình thoát lỗi để Render khởi động bản mới thay vì giữ web chạy với bot đã hỏng. Khi đang online, discord.js quản lý việc kết nối lại Gateway. Voice bắt đầu ngay khi Gateway sẵn sàng, không chờ đăng ký slash command hay đồng bộ vai trò. Đăng ký lệnh và xử lý bot dùng chung hàng đợi REST để phối hợp giới hạn yêu cầu.
+
+Render là bản chính: giữ `BOT_ENABLED=true` trên Render. Muốn thử bot local trong lúc Render vẫn chạy, dùng **ứng dụng Discord thử nghiệm riêng** (token, Client ID, Client Secret riêng) và server thử nghiệm. Nếu chỉ kiểm tra trang công khai/luồng OAuth, có thể mở local an toàn bằng PowerShell:
+
+```powershell
+$env:BOT_ENABLED='false'
+npm run dev
+```
+
+Chế độ này không có cache server của bot nên không dùng để kiểm tra trang cấu hình server hay lệnh/XP. Khi chuyển sang bot thử nghiệm, chạy `Remove-Item Env:BOT_ENABLED` rồi `npm run dev`. Không mở đồng thời hai tiến trình dùng token bot chính.
 
 ## Dùng trong Discord
 
@@ -119,6 +131,8 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 - `GET /api/guilds/:id/leaderboard?page=1`: 10 người/trang, trả `entries`, `memberCount`, `page`, `pageSize`, `totalPages`; yêu cầu quyền quản lý. Trang vượt cuối được đưa về trang cuối, trang không phải số nguyên dương nhận HTTP 400.
 - `GET /health`: HTTP 200 khi MongoDB và Discord Gateway đã kết nối, 503 nếu một trong hai chưa sẵn sàng. `discord: true` không kiểm chứng việc gửi HTTP callback hoặc đổi token OAuth; các yêu cầu đó vẫn có thể bị Discord trả 429.
 
+Trong chế độ `BOT_ENABLED=false`, `/health` chỉ yêu cầu MongoDB, đồng thời trả rõ `botEnabled: false` và `discord: false`. Trên Render, `revision` chứa 7 ký tự đầu commit đang chạy để xác nhận deploy.
+
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
 
 Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.
@@ -163,6 +177,8 @@ Có sẵn `render.yaml` cho một Node Web Service: bot + dashboard dùng chung 
 4. Thêm callback HTTPS đó vào Developer Portal. Khóa session được Blueprint tạo tự động.
 5. Cho phép IP dịch vụ truy cập Atlas. Nếu nâng cấp v1, thêm các biến guild/role cũ khi cần.
 6. Kiểm tra `/health`, đăng nhập OAuth thực tế, gửi chat, voice và thử thành viên tham gia/rời server.
+
+Nếu bỏ trống `DASHBOARD_URL`, bot dùng `RENDER_EXTERNAL_URL` do Render cấp; nếu bỏ trống `OAUTH2_CALLBACK_URL`, dùng URL gốc cộng `/auth/discord/callback`. Local vẫn mặc định `http://localhost:<PORT>`. URL đã khai báo tường minh luôn được ưu tiên, cần khớp Redirect trong Discord Developer Portal.
 
 Blueprint dùng gói Free để thử nghiệm. **Không cam kết online 24/7**: Render Free có sleep, quota và giới hạn khác. Dùng gói luôn chạy hoặc máy chủ riêng nếu cần ổn định. Dịch vụ ping chỉ dùng theo dõi, không phải bảo đảm khả dụng. Xem [giới hạn chính thức của Render](https://render.com/docs/free).
 

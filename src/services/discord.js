@@ -1,7 +1,6 @@
 import {
   Client,
   GatewayIntentBits,
-  REST,
   RESTEvents,
   RateLimitError,
   Routes,
@@ -12,6 +11,7 @@ import {
 import { config } from '../config/index.js';
 import { getErrorDiagnostics } from '../utils/errors.js';
 import { getRateLimitDiagnostics } from '../utils/rateLimit.js';
+import { startReadyServices } from './startup.js';
 import { handleChatMessage } from '../core/chatXp.js';
 import { startVoiceXpTracker, handleVoiceStateUpdate } from '../core/voiceXp.js';
 import { handleMemberEvent } from '../core/welcome.js';
@@ -63,14 +63,13 @@ client.commands.set(setupCommand.data.name, setupCommand);
 /**
  * Đăng ký Slash Commands với Discord API
  */
-export async function registerSlashCommands() {
+export async function registerSlashCommands(rest = client.rest) {
   if (!config.token || !config.clientId) {
     console.warn('[Discord] [WARN] Thieu DISCORD_TOKEN hoac DISCORD_CLIENT_ID trong .env.');
     return null;
   }
 
-  const rest = new REST({ version: '10' }).setToken(config.token);
-  attachRestDiagnostics(rest);
+  rest.setToken(config.token);
   const commandsBody = [
     rankCommand.data.toJSON(),
     leaderboardCommand.data.toJSON(),
@@ -83,10 +82,11 @@ export async function registerSlashCommands() {
     const registered = await rest.put(Routes.applicationCommands(config.clientId), {
       body: commandsBody
     });
+    client.registeredCommands = new Collection(registered.map(command => [command.id, command]));
     console.log('[Discord] [INFO] Da dang ky Slash Commands Global thanh cong.');
     return registered;
   } catch (error) {
-    console.error('[Discord] [ERROR] Dang ky Slash Commands that bai:', error.message);
+    console.error('[Discord] [ERROR] Dang ky Slash Commands that bai:', JSON.stringify(getErrorDiagnostics(error)));
     return null;
   }
 }
@@ -101,11 +101,11 @@ export async function initDiscordClient() {
   }
 
   // Sự kiện khi Bot online thành công
-  client.once(Events.ClientReady, async (readyClient) => {
+  client.once(Events.ClientReady, (readyClient) => {
     console.log(`[Discord] [INFO] Bot da dang nhap thanh cong voi tag: ${readyClient.user.tag}`);
-    await registerSlashCommands();
-    startVoiceXpTracker(readyClient);
-    void syncClientGuilds(readyClient);
+    void startReadyServices(readyClient, {
+      startVoice: startVoiceXpTracker, registerCommands: registerSlashCommands, syncGuilds: syncClientGuilds,
+    });
   });
 
   // Sự kiện nhận tin nhắn mới
@@ -175,7 +175,7 @@ export async function initDiscordClient() {
     return true;
   } catch (error) {
     console.error('[Discord] [ERROR] Dang nhap Discord that bai:', JSON.stringify(getErrorDiagnostics(error)));
-    return false;
+    throw error;
   } finally {
     clearTimeout(loginWarning);
   }
