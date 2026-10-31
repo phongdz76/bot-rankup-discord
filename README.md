@@ -133,6 +133,10 @@ Bộ đếm tin nhắn chỉ tăng cho tin nhắn nhận XP. Voice chỉ tính �
 
 Trong chế độ `BOT_ENABLED=false`, `/health` chỉ yêu cầu MongoDB, đồng thời trả rõ `botEnabled: false` và `discord: false`. Trên Render, `revision` chứa 7 ký tự đầu commit đang chạy để xác nhận deploy.
 
+`discordHttp.interactions` tách trạng thái callback khỏi kết nối Gateway: `unverified` khi chưa có phản hồi thành công hoặc thời gian chờ 429 vừa hết, `rate_limited` trong thời gian Discord yêu cầu chờ, `available` khi callback gần nhất thành công. `lastInteractionResponse` giữ HTTP status, thời điểm và `retryAt` nếu có. Đây là kết quả quan sát gần nhất, không phải phép thử chủ động hay cam kết yêu cầu tiếp theo thành công. HTTP status của `/health` vẫn kiểm tra MongoDB/Gateway để tránh restart dịch vụ liên tục khi upstream trả 429.
+
+Log `[Discord REST] REQUEST_SUMMARY` đếm phản hồi HTTP mỗi phút theo nhóm cố định (interaction/webhook/guild/channel/application/other) và status, bao gồm từng lần thử lại của SDK. Log lỗi thêm `operation`, mã số `discordCode` và `bucketPresent` khi upstream cung cấp. Chẩn đoán đọc bản sao phản hồi, không ghi đường dẫn/token/body hay làm thay đổi body SDK xử lý. Thống kê này chỉ bao gồm Discord REST của bot, không bao gồm OAuth/dashboard hoặc yêu cầu từ ứng dụng khác dùng chung hạ tầng.
+
 Session tồn tại tối đa 24 giờ hoặc đến lúc access token hết hạn; khi hết hạn, đăng nhập lại. Client Secret và token không được render vào HTML. Quyền server được kiểm tra lại bằng member/role từ Discord, không chỉ dựa trên thông tin OAuth lúc đăng nhập.
 
 Khóa mã hóa Mongo session được dẫn xuất riêng từ `SESSION_SECRET`, hỗ trợ cả khóa hex ngẫu nhiên do lệnh hướng dẫn tạo ra. Khi nâng cấp từ phiên bản dùng trực tiếp secret để mã hóa, phiên cũ cần đăng nhập lại. Lỗi callback hiển thị mã hỗ trợ; `logs/oauth.log` ghi thời điểm, mã lỗi, HTTP status và mã lỗi kết nối nếu có, không ghi code/token/state/secret.

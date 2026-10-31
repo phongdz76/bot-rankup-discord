@@ -34,6 +34,7 @@ async function shutdown(signal, code = 0) {
   console.log(`[Process] ${signal}: đang đóng kết nối...`);
   const timeout = setTimeout(() => process.exit(1), 10000).unref();
   stopVoiceXpTracker();
+  client.emit('diagnosticsStop');
   await client.destroy();
   if (web?.server) await new Promise(resolve => web.server.close(resolve));
   await web?.store?.close();

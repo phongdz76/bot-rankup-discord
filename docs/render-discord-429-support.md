@@ -29,3 +29,25 @@ References:
 
 - https://docs.discord.com/developers/topics/rate-limits
 - https://render.com/docs/outbound-ip-addresses
+
+## Recurrence on 2026-10-31
+
+Service ID: `srv-dbfoos7avr4c73dk1njg`, Singapore region. Running revision: `ff90770`. All times below are Asia/Saigon (UTC+07:00).
+
+The previous cooldown ended around 15:19:13. The bot logged in at 15:19:15, registered global commands successfully, and completed role synchronization for two guilds (1 and 38 non-bot members). Another cooldown was observed at 15:53:33, without an intervening deployment. The application continued receiving `/help` Gateway events, but Discord rejected the initial interaction acknowledgment.
+
+```text
+15:53:33 [Discord] Executing /help
+15:53:33 [Discord REST] HTTP_ERROR {"httpStatus":429,"retryAfterSeconds":1933,"responseFormat":"json","cfRay":"a5316e154999a17f-SIN"}
+15:53:33 [Discord] INTERACTION_RATE_LIMITED {"command":"help","retryAfterSeconds":1933.05,"scope":"user","global":false}
+15:57:43 [Discord] Executing /help
+15:57:43 [Discord REST] HTTP_ERROR {"httpStatus":429,"retryAfterSeconds":1683,"responseFormat":"json","cfRay":"a53174315842fdc0-SIN"}
+16:05:46 [Discord REST] HTTP_ERROR {"httpStatus":429,"retryAfterSeconds":1200,"responseFormat":"json","cfRay":"a5317ff70bf1ce4f-SIN"}
+16:05:46 [Discord] INTERACTION_RATE_LIMITED {"command":"help","retryAfterSeconds":1200.05,"scope":"user","global":false}
+```
+
+The command execution entries above are shortened; the status and diagnostic JSON are copied from the service logs. These responses point to the same earliest retry time of approximately **16:25:46 on 2026-10-31**. This is the server-provided cooldown deadline, not a guarantee that later requests will succeed. Failed interactions must not be replayed after the cooldown; a fresh command is needed.
+
+During this investigation, `/health` returned HTTP 200 with `database: true`, `discord: true`, `botEnabled: true`, and revision `ff90770`. This endpoint checks database/Gateway readiness, not successful interaction acknowledgment. Local read-only requests to `/users/@me` and `/oauth2/applications/@me` both returned HTTP 200; the bot identity matched the configured application and no interactions endpoint URL was configured. These checks establish local authentication health, not local interaction-callback success.
+
+The reviewed code uses cached voice/member state for voice XP, compares roles before writing changes, and caches completed guild role scans. This review does not establish the actual outgoing request rate or the cause of the restriction. Render documents shared outbound IP ranges within a region, but the observed JSON 429 responses and Cloudflare Ray IDs alone do not establish an IP ban, shared-IP interference, or Cloudflare error 1015. Please use the supplied timestamps and Ray IDs to investigate the restriction and its recurrence.

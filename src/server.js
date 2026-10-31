@@ -34,6 +34,7 @@ export function createWebApp({ client, settings = config, store, api = discordAp
     res.status(ready ? 200 : 503).json({
       status: ready ? 'healthy' : 'degraded', database, discord,
       botEnabled: settings.botEnabled !== false,
+      discordHttp: client?.httpDiagnostics?.snapshot() || null,
       revision: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT || '') ? process.env.RENDER_GIT_COMMIT.slice(0, 7) : null,
       uptimeSeconds: Math.floor(process.uptime()),
     });

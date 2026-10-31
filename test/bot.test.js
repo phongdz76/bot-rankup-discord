@@ -489,6 +489,18 @@ test('local web-only mode reports the bot as disabled without claiming a Discord
   assert.equal(health.body.discord, false);
 });
 
+test('health distinguishes a connected Gateway from rate-limited interaction callbacks', async () => {
+  const { client } = fixture(); client.isReady = () => true;
+  const snapshot = { interactions: 'rate_limited', lastInteractionResponse: {
+    httpStatus: 429, at: '2026-10-31T09:05:46.000Z', retryAt: '2026-10-31T09:25:46.000Z',
+  } };
+  client.httpDiagnostics = { snapshot: () => snapshot };
+  const app = createWebApp({ client, settings: { ...config, dashboard: { clientSecret: '', sessionSecret: '' } } });
+  const health = await request(app).get('/health').expect(200);
+  assert.equal(health.body.discord, true);
+  assert.deepEqual(health.body.discordHttp, snapshot);
+});
+
 test('Render HTTPS proxy login issues a secure session cookie with the production callback', async () => {
   const { client } = fixture();
   const callbackUrl = 'https://bot-rankup-discord.onrender.com/auth/discord/callback';

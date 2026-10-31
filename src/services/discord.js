@@ -1,7 +1,6 @@
 import {
   Client,
   GatewayIntentBits,
-  RESTEvents,
   RateLimitError,
   Routes,
   Collection,
@@ -12,6 +11,7 @@ import { config } from '../config/index.js';
 import { getErrorDiagnostics } from '../utils/errors.js';
 import { getRateLimitDiagnostics } from '../utils/rateLimit.js';
 import { startReadyServices } from './startup.js';
+import { attachDiscordHttpDiagnostics } from './discordHttp.js';
 import { handleChatMessage } from '../core/chatXp.js';
 import { startVoiceXpTracker, handleVoiceStateUpdate } from '../core/voiceXp.js';
 import { handleMemberEvent } from '../core/welcome.js';
@@ -23,7 +23,8 @@ import * as setupCommand from '../commands/setup.js';
 
 export const client = new Client({
   // Callback hết hạn nhanh: không xếp lại vào hàng đợi khi đã nhận 429.
-  rest: { rejectOnRateLimit: ['/interactions/'] },
+  // Native fetch lets the SDK clone response bodies for safe diagnostics.
+  rest: { makeRequest: fetch, rejectOnRateLimit: ['/interactions/'] },
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -33,21 +34,9 @@ export const client = new Client({
   ]
 });
 
-// Không ghi route/URL: đường dẫn phản hồi tương tác có chứa token.
-function attachRestDiagnostics(rest) {
-  rest.on(RESTEvents.Response, (_request, response) => {
-    if (response.status >= 400) console.warn('[Discord REST] HTTP_ERROR', JSON.stringify({
-      httpStatus: response.status,
-      ...(response.status === 429 ? getRateLimitDiagnostics(response) : {}),
-    }));
-  });
-  rest.on(RESTEvents.RateLimited, info => {
-    console.warn('[Discord REST] RATE_LIMITED', JSON.stringify({
-      global: info.global, retryAfterMs: info.retryAfter,
-    }));
-  });
-}
-attachRestDiagnostics(client.rest);
+client.httpDiagnostics = attachDiscordHttpDiagnostics(client.rest);
+const httpSummary = setInterval(() => client.httpDiagnostics.flush(), 60000).unref();
+client.once('diagnosticsStop', () => clearInterval(httpSummary));
 client.on(Events.Error, error => console.error('[Discord] CLIENT_ERROR', JSON.stringify(getErrorDiagnostics(error))));
 client.on(Events.ShardError, (error, shardId) => console.error('[Discord] SHARD_ERROR', JSON.stringify({ shardId, ...getErrorDiagnostics(error) })));
 client.on(Events.ShardDisconnect, (event, shardId) => console.warn('[Discord] SHARD_DISCONNECTED', JSON.stringify({ shardId, closeCode: event.code })));

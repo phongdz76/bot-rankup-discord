@@ -23,6 +23,8 @@ export function getRateLimitDiagnostics(input = {}, now = Date.now()) {
   if (scopes.has(scope)) result.scope = scope;
   const global = header('x-ratelimit-global') === 'true' ? true : input.global ?? payload?.global;
   if (typeof global === 'boolean') result.global = global;
+  if (Number.isSafeInteger(payload?.code) && payload.code >= 0 && payload.code <= 1000000) result.discordCode = payload.code;
+  if (header('x-ratelimit-bucket')) result.bucketPresent = true;
   const contentType = header('content-type') || '';
   if (contentType.includes('application/json') || input.responseFormat === 'json' || payload) result.responseFormat = 'json';
   else if (contentType.includes('text/html') || input.responseFormat === 'html') result.responseFormat = 'html';
