@@ -237,6 +237,23 @@ test('publishing a persistent game panel checks channel access and sends a non-p
   assert.equal(result.url, `https://discord.com/channels/${guildId}/${channelId}/666666666666666666`);
 });
 
+test('expired preflight releases the selection lock before Discord responds and never writes late roles', async t => {
+  const { guild, client, member, settings } = fixture(); await GuildConfig.create(settings);
+  let release, started;
+  const entered = new Promise(resolve => { started = resolve; });
+  guild.roles.fetch = () => new Promise(resolve => { release = resolve; started(); });
+  let writes = 0; t.mock.method(globalThis, 'fetch', async () => { writes++; return new Response(null, { status: 204 }); });
+  const controller = new AbortController();
+  const base = { guildId, guild, client, user: member.user, values: [roleId], customId: `games:${gameRoleSignature(settings)}` };
+  const first = applyGameRoles({ ...base, signal: controller.signal });
+  await entered;
+  controller.abort(); await assert.rejects(first, { name: 'AbortError' });
+  guild.roles.fetch = async () => {};
+  await applyGameRoles(base); assert.equal(writes, 1);
+  release(); await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(writes, 1);
+});
+
 test('role HTTP 429 is not retried, respects cooldown and diagnostics never include credentials', async t => {
   const { guild, client, member, settings } = fixture(); await GuildConfig.create(settings);
   const logs = []; t.mock.method(console, 'warn', (...args) => logs.push(args.join(' ')));

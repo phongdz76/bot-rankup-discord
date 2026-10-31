@@ -12,6 +12,17 @@ const unsafePermissions = [
 const pending = new Set();
 const cooldown = createOAuthCooldown();
 
+async function withDeadline(signal, operation) {
+  signal.throwIfAborted();
+  let aborted;
+  const deadline = new Promise((resolve, reject) => {
+    aborted = () => reject(signal.reason);
+    signal.addEventListener('abort', aborted, { once: true });
+  });
+  try { return await Promise.race([operation(), deadline]); }
+  finally { signal.removeEventListener('abort', aborted); }
+}
+
 export const gameRoleDefaults = () => ({ enabled: false, mode: 'multiple', roles: [] });
 export const gameRoleSignature = settings => createHash('sha256').update(JSON.stringify(settings.gameRoles || gameRoleDefaults())).digest('hex').slice(0, 12);
 export const isSafeGameRole = role => Boolean(role && !role.managed && role.editable && role.permissions && !role.permissions.any(unsafePermissions));
@@ -66,35 +77,41 @@ export async function applyGameRoles(interaction) {
   if (pending.has(key)) throw new SettingsError('Lượt chọn trước đang được xử lý. Hãy chờ rồi mở /games.');
   pending.add(key);
   try {
-    const guild = interaction.guild;
-    if (!guild || !interaction.client.isReady()) throw new SettingsError('Bot đang kết nối lại. Hãy thử chọn game sau.');
-    const settings = await getGuildConfig(guild.id);
-    const games = settings.gameRoles || gameRoleDefaults();
-    const selected = interaction.values;
-    if (!games.enabled || !games.roles.length || interaction.customId !== `games:${gameRoleSignature(settings)}`) {
-      throw new SettingsError('Bảng chọn đã thay đổi. Mở /games để lấy bảng chọn mới.');
-    }
-    if (!Array.isArray(selected) || new Set(selected).size !== selected.length ||
-      selected.some(id => !games.roles.some(role => role.roleId === id)) || (games.mode === 'single' && selected.length > 1)) {
-      throw new SettingsError('Lựa chọn game không hợp lệ.');
-    }
-    await guild.roles.fetch();
-    const me = await guild.members.fetchMe({ force: true });
-    const member = await guild.members.fetch({ user: interaction.user.id, force: true });
-    await validateGameRoleResources(guild, settings, me);
-    if (gameRoleSignature(await getGuildConfig(guild.id)) !== gameRoleSignature(settings)) {
-      throw new SettingsError('Cấu hình vừa thay đổi. Mở /games để chọn lại.');
-    }
     const signal = interaction.signal || AbortSignal.timeout(15000);
-    const changes = games.roles.filter(role => member.roles.cache.has(role.roleId) !== selected.includes(role.roleId))
-      .sort((a, b) => Number(selected.includes(b.roleId)) - Number(selected.includes(a.roleId)));
-    for (const role of changes) {
+    return await withDeadline(signal, async () => {
+      const guild = interaction.guild;
+      if (!guild || !interaction.client.isReady()) throw new SettingsError('Bot đang kết nối lại. Hãy thử chọn game sau.');
+      const settings = await getGuildConfig(guild.id);
       signal.throwIfAborted();
-      // PUT/DELETE riêng từng role: không ghi đè toàn bộ role của thành viên.
-      await gameRequest(guild, `/guilds/${guild.id}/members/${member.id}/roles/${role.roleId}`,
-        selected.includes(role.roleId) ? 'PUT' : 'DELETE', signal);
-    }
-    return { ...gameRoleMenu(settings, selected), content: '✅ Đã cập nhật role game của bạn.\n' + gameRoleMenu(settings, selected).content };
+      const games = settings.gameRoles || gameRoleDefaults();
+      const selected = interaction.values;
+      if (!games.enabled || !games.roles.length || interaction.customId !== `games:${gameRoleSignature(settings)}`) {
+        throw new SettingsError('Bảng chọn đã thay đổi. Mở /games để lấy bảng chọn mới.');
+      }
+      if (!Array.isArray(selected) || new Set(selected).size !== selected.length ||
+        selected.some(id => !games.roles.some(role => role.roleId === id)) || (games.mode === 'single' && selected.length > 1)) {
+        throw new SettingsError('Lựa chọn game không hợp lệ.');
+      }
+      await guild.roles.fetch();
+      signal.throwIfAborted();
+      const me = await guild.members.fetchMe({ force: true });
+      signal.throwIfAborted();
+      const member = await guild.members.fetch({ user: interaction.user.id, force: true });
+      signal.throwIfAborted();
+      await validateGameRoleResources(guild, settings, me);
+      if (gameRoleSignature(await getGuildConfig(guild.id)) !== gameRoleSignature(settings)) {
+        throw new SettingsError('Cấu hình vừa thay đổi. Mở /games để chọn lại.');
+      }
+      const changes = games.roles.filter(role => member.roles.cache.has(role.roleId) !== selected.includes(role.roleId))
+        .sort((a, b) => Number(selected.includes(b.roleId)) - Number(selected.includes(a.roleId)));
+      for (const role of changes) {
+        signal.throwIfAborted();
+        // PUT/DELETE riêng từng role: không ghi đè toàn bộ role của thành viên.
+        await gameRequest(guild, `/guilds/${guild.id}/members/${member.id}/roles/${role.roleId}`,
+          selected.includes(role.roleId) ? 'PUT' : 'DELETE', signal);
+      }
+      return { ...gameRoleMenu(settings, selected), content: '✅ Đã cập nhật role game của bạn.\n' + gameRoleMenu(settings, selected).content };
+    });
   } finally { pending.delete(key); }
 }
 
@@ -110,18 +127,22 @@ export async function handleGameRoleInteraction(interaction) {
 }
 
 export async function publishGameRolePanel(guild, channelId) {
-  const settings = await getGuildConfig(guild.id);
-  const payload = gameRoleMenu(settings);
-  await Promise.all([guild.channels.fetch(), guild.roles.fetch()]);
-  const me = await guild.members.fetchMe({ force: true });
-  await validateGameRoleResources(guild, settings, me);
-  const channel = guild.channels.cache.get(channelId);
-  if (!channel || !textChannelTypes.includes(channel.type) ||
-    !channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
-    throw new SettingsError('Chọn kênh văn bản trong server mà bot có quyền xem và gửi tin.');
-  }
-  const response = await gameRequest(guild, `/channels/${channel.id}/messages`, 'POST', undefined,
-    { content: payload.content, components: payload.components.map(row => row.toJSON()), allowed_mentions: { parse: [] } });
-  const message = await response.json();
-  return { url: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}` };
+  const signal = AbortSignal.timeout(15000);
+  return withDeadline(signal, async () => {
+    const settings = await getGuildConfig(guild.id);
+    const payload = gameRoleMenu(settings);
+    await Promise.all([guild.channels.fetch(), guild.roles.fetch()]);
+    signal.throwIfAborted();
+    const me = await guild.members.fetchMe({ force: true });
+    await validateGameRoleResources(guild, settings, me);
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !textChannelTypes.includes(channel.type) ||
+      !channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+      throw new SettingsError('Chọn kênh văn bản trong server mà bot có quyền xem và gửi tin.');
+    }
+    const response = await gameRequest(guild, `/channels/${channel.id}/messages`, 'POST', signal,
+      { content: payload.content, components: payload.components.map(row => row.toJSON()), allowed_mentions: { parse: [] } });
+    const message = await response.json();
+    return { url: `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}` };
+  });
 }
